@@ -113,7 +113,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.1.1 · 更新 2026-07-16 15:17';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.1.2 · 更新 2026-07-16 15:33';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:21, block:7,                 // 21×21 切 3×3 个 7×7 区块，取十字五区为可玩区（每家 7×7）
   cols:21, rows:21,
@@ -315,7 +315,13 @@ const SIM = {
       u.winding=false; const vel=(DX/spec.mv)*CFG.moveSpeedMult, step=vel*dt;
       let dirx=gx-u.px, diry=gy-u.py; const dl=Math.hypot(dirx,diry)||1; dirx/=dl; diry/=dl;
       for(const a of [0,0.5,-0.5,1.0,-1.0,1.6,-1.6]){ const ca=Math.cos(a),sa=Math.sin(a); const rx=dirx*ca-diry*sa, ry=dirx*sa+diry*ca;
-        const nx=u.px+rx*step, ny=u.py+ry*step; const h=pixelToHex(nx,ny); if(!h) continue; if(isBaseCell(h.c,h.r) && (shieldActive(S)||u.isHero)) continue; const tt=S.tiles[h.r][h.c]; const nb=tt&&tt.building; if(nb && isEnemy(nb.owner,u.owner)) continue; u.px=nx; u.py=ny; break; }   // 只有敌方建筑挡路；自家/友方建筑可穿过
+        const nx=u.px+rx*step, ny=u.py+ry*step; const h=pixelToHex(nx,ny); if(!h) continue;
+        if(isBaseCell(h.c,h.r) || Math.hypot(nx-BASE_PX.x,ny-BASE_PX.y)<SIZE*0.9){   // 目标像素落入大本营六角形内
+          const rn=S._baseRunner && S._baseRunner[TEAM[u.owner]];
+          const allowed = !shieldActive(S) && !u.isHero && (u===rn || u===S.base.garrison);   // 只有占点者/现任驻军可入；护罩期谁都不行
+          if(!allowed) continue;                                                              // 其余兵(含近战攻击者)贴着六角形边打，不进去
+        }
+        const tt=S.tiles[h.r][h.c]; const nb=tt&&tt.building; if(nb && isEnemy(nb.owner,u.owner)) continue; u.px=nx; u.py=ny; break; }   // 只有敌方建筑挡路；自家/友方建筑可穿过
     }
     // 塔/主城开火：射程内最近敌兵
     for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!b||(b.kind!=='tower'&&b.kind!=='city')) continue; b.atkCd=Math.max(0,(b.atkCd||0)-dt); const spec=b.kind==='city'?CFG.city:CFG.towers[b.cardId];
@@ -349,7 +355,7 @@ function mkMine(o){ return {kind:'mine',owner:o,hp:CFG.mine.hp,maxHp:CFG.mine.hp
 function mkOutpost(o){ return {kind:'outpost',owner:o,hp:CFG.outpost.hp,maxHp:CFG.outpost.hp}; }
 function mkTower(o,id){ const s=CFG.towers[id]; return {kind:'tower',cardId:id,owner:o,hp:s.hp,maxHp:s.hp,atkCd:0}; }
 function mkBarracks(o,id){ const s=CFG.troops[id]; const iv=s.spawn*CFG.spawnIntervalMult; return {kind:'barracks',cardId:id,owner:o,hp:s.bhp,maxHp:s.bhp,spawnCd:iv/3,spawnTotal:iv/3}; }
-function spawnUnit(S,o,card,c,r){ const s=CFG.troops[card]; const tgt=CENTER_CR; const ns=neighbors(c,r).filter(n=>!(S.tiles[n.r][n.c].building)).sort((a,b)=>hexDist(a.c,a.r,tgt.c,tgt.r)-hexDist(b.c,b.r,tgt.c,tgt.r)); const sp=ns[0]||{c,r}; const ct=center(sp.c,sp.r);
+function spawnUnit(S,o,card,c,r){ const s=CFG.troops[card]; const tgt=CENTER_CR; const ns=neighbors(c,r).filter(n=>!(S.tiles[n.r][n.c].building) && !isBaseCell(n.c,n.r)).sort((a,b)=>hexDist(a.c,a.r,tgt.c,tgt.r)-hexDist(b.c,b.r,tgt.c,tgt.r)); const sp=ns[0]||{c,r}; const ct=center(sp.c,sp.r);
   const st=S.tiles[sp.r] && S.tiles[sp.r][sp.c]; if(st && !st.building && !isAlly(st.owner,o)) st.owner=o;   // 出生格立即归己方（修复：出生不夺格）
   S.units.push({id:S.nextId++,owner:o,cardId:card,c:sp.c,r:sp.r,px:ct.x,py:ct.y,hp:s.hp,maxHp:s.hp,atkCd:0,isHero:card==='dragon',heroCd:card==='dragon'?s.hero.skillMs:0}); if(card==='dragon') S.heroFx={side:o, until:S.timeMs+2400}; }
 function hitUnit(S,e,dmg){ e.hp -= (e===S.base.garrison ? dmg*0.5 : dmg); }   // 大本营驻军受伤减半
@@ -482,6 +488,7 @@ function updateBase(S,dt){
   if(!g && onC.length){ g = onC.find(u=>u.cardId==='mage') || onC[0]; }        // 空位：法师优先进驻
   else if(g && g.cardId!=='mage'){ const m=onC.find(u=>u.cardId==='mage' && isAlly(u.owner,g.owner)); if(m) g=m; }   // 法师到场→顶替(享减伤+射程)
   S.base.garrison=g;
+  if(g){ g.px=BASE_PX.x; g.py=BASE_PX.y; g.c=Cc; g.r=Cr; }                     // 驻军放正：钉在六角形正中心
   const enemyOnC = g && onC.some(u=>isEnemy(u.owner,g.owner));         // 敌兵也踏上中心 → 争夺（先分胜负，不推进）
   if(g && !enemyOnC){ const t=TEAM[g.owner];
     if(t==='blue'){ S.base.blue=Math.min(100,S.base.blue+rate*sec); S.base.red=Math.max(0,S.base.red-CFG.baseDrainPerSec*sec); }
