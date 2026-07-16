@@ -90,8 +90,27 @@
     <div id="startModal" style="display:flex;" class="modal-bg">
       <div class="modal">
         <div class="result-title" style="color:#26261f;">四角大战 2v2</div>
-        <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.7;">你在<b style="color:#1f6fc4">下方（蓝队）</b>，队友在<b style="color:#1f6fc4">上方</b>；左右两家为<b style="color:#c23b3b">红队</b>。<br>玩法与 1v1 完全相同：<b>单击自己浅色格翻地建造</b>矿/塔/兵营，小兵自动出击。<br>下方指挥键调度你的部队：<b>攻左 / 防守 / 抢营 / 攻右</b>，默认「防守」（在家附近巡防、救援被打的友军，不贸然出击）。<br>开局 <b>30 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>谁都进不去；之后切「抢营」去占领，占领条拉满即胜。</div>
-        <button id="startBtn" style="font-size:16px;padding:8px 22px;">开始</button>
+        <div class="deck-grid" style="max-height:52vh;font-size:13px;color:#555;line-height:1.75;text-align:left;">
+          <div>
+            <b style="color:#26261f;">基础玩法</b><br>
+            · 你在<b style="color:#1f6fc4">下方（蓝队）</b>，队友在上方；左右两家是<b style="color:#c23b3b">红队</b>，2v2 对战。<br>
+            · <b>点击己方浅色格「翻地建造」</b>：随机开出宝矿（产宝石）/ 兵营（自动出兵）/ 防御塔；离你现有建筑越远造价越贵。<br>
+            · 小兵全自动战斗：自动寻敌、走过的空地自动变成你的领地。<br>
+            · 用底部四个指挥键调度全队部队：<b>攻左 / 防守 / 抢营 / 攻右</b>（默认防守：在自家建筑附近巡逻、救援被打的友军）。<br>
+            · <b>获胜方式</b>：驻守中央大本营把占领进度圈填满（独占约 60 秒）；或拆光敌队两座主城；5 分钟到时则比占领进度/占地多少。
+          </div>
+          <div>
+            <b style="color:#26261f;">注意要点</b><br>
+            · 开局 <b>30 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>，谁都进不去，先发育。<br>
+            · 大本营<b>只能进 1 个兵</b>驻守：切「抢营」后会自动派 1 个兵进驻（优先法师），其余部队在外圈护卫；驻军<b>受伤减半、远程射程+1</b>；<b>巨龙不能进</b>大本营。<br>
+            · 外部攻打大本营的兵只能<b>贴着六角形边缘</b>打，打死驻军后己方才能进驻。<br>
+            · 中间<b>未占领的灰色地块可以直接翻地建造</b>，建成即归你——把兵营铺向中路是取胜关键。<br>
+            · 自家/友方建筑可以直接<b>穿行</b>；敌方建筑挡路（拆掉或绕开）。<br>
+            · 地图操作：<b>拖动平移、双指捏合缩放</b>（电脑：拖动平移、滚轮缩放），轻点仍是翻地。<br>
+            · 顶部进度条＝三方占地占比（蓝/灰/红）；大本营占领百分比看中央的分半圆环与倒计时。
+          </div>
+        </div>
+        <button id="startBtn" style="font-size:16px;padding:8px 22px;margin-top:12px;">开始</button>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button></div>
       </div>
     </div>
@@ -113,7 +132,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.1.2 · 更新 2026-07-16 15:33';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.2.0 · 更新 2026-07-16 16:00';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:21, block:7,                 // 21×21 切 3×3 个 7×7 区块，取十字五区为可玩区（每家 7×7）
   cols:21, rows:21,
@@ -562,16 +581,27 @@ const AI={ cd:{B:0,C:0,D:0}, cmdCd:0,
 /* ---------------- RENDER（T2） ---------------- */
 const cv=document.getElementById('board'), ctx=cv.getContext('2d');
 const CW=OX+(CFG.cols-1)*DX+DX/2+SIZE, CH=OY+(CFG.rows-1)*DY+SIZE;
+/* ---- 相机：默认缩放到上下高度匹配(左右可出屏)，支持双指缩放/拖拽平移 ---- */
+const CAM={s:1,x:0,y:0,min:0.2,max:4,vw:0,vh:0,dpr:1,inited:false};
+function clampCam(){
+  const mw=CW*CAM.s, mh=CH*CAM.s;
+  if(mw<=CAM.vw) CAM.x=(CAM.vw-mw)/2; else CAM.x=Math.max(CAM.vw-mw, Math.min(0, CAM.x));
+  if(mh<=CAM.vh) CAM.y=(CAM.vh-mh)/2; else CAM.y=Math.max(CAM.vh-mh, Math.min(0, CAM.y));
+}
 function setupCanvas(){
   const wrap=document.getElementById('boardWrap');
-  const availW=(wrap&&wrap.clientWidth)||window.innerWidth, availH=(wrap&&wrap.clientHeight)||window.innerHeight;
-  if(availW<=1||availH<=1) return;
-  const scale=Math.min(availW/CW, availH/CH);            // 等比：在可用区内尽量放大（多为高度约束→跟页面同高）
-  const dw=Math.max(1,Math.floor(CW*scale)), dh=Math.max(1,Math.floor(CH*scale));
+  const w=(wrap&&wrap.clientWidth)||window.innerWidth, h=(wrap&&wrap.clientHeight)||window.innerHeight;
+  if(w<=1||h<=1) return;
   const dpr=window.devicePixelRatio||1;
-  cv.style.width=dw+'px'; cv.style.height=dh+'px';
-  cv.width=Math.round(dw*dpr); cv.height=Math.round(dh*dpr);
-  ctx.setTransform(scale*dpr,0,0,scale*dpr,0,0);         // 逻辑坐标仍 CW×CH，清晰
+  cv.style.width=w+'px'; cv.style.height=h+'px';
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  CAM.vw=w; CAM.vh=h; CAM.dpr=dpr;
+  const fitH=h/CH, fitW=w/CW;
+  CAM.min=Math.min(fitH,fitW);          // 最小＝整图刚好放下
+  CAM.max=fitH*3;                        // 最大＝高度匹配的3倍
+  if(!CAM.inited){ CAM.s=fitH; CAM.x=(w-CW*fitH)/2; CAM.y=(h-CH*fitH)/2; CAM.inited=true; }   // 默认：高度匹配、水平居中(左右出屏)
+  CAM.s=Math.max(CAM.min,Math.min(CAM.max,CAM.s));
+  clampCam();
 }
 window.addEventListener('resize', ()=>{ setupCanvas(); if(typeof G!=='undefined'&&G) render(G); });
 const OWN={ A:{fill:'#2f7ed8',tint:'#dfeaf9',border:'#8fbdec'}, C:{fill:'#4a93de',tint:'#e5eef9',border:'#a9c8ea'},
@@ -597,7 +627,8 @@ function iconKey(b){ if(b.kind==='city')return CARD.city; if(b.kind==='mine')ret
 function hpbar(cx,cy,w,frac){ ctx.fillStyle=COL.hpTrack; ctx.fillRect(cx-w/2,cy,w,2.8); ctx.fillStyle=COL.hp; ctx.fillRect(cx-w/2,cy,w*frac,2.8); }
 let hover=null;
 function render(S){
-  ctx.clearRect(0,0,CW,CH);
+  ctx.setTransform(CAM.dpr,0,0,CAM.dpr,0,0); ctx.clearRect(0,0,CAM.vw,CAM.vh);           // 屏幕空间清屏
+  ctx.setTransform(CAM.dpr*CAM.s,0,0,CAM.dpr*CAM.s, CAM.dpr*CAM.x, CAM.dpr*CAM.y);      // 相机变换：世界坐标照旧
   // 迷雾揭示：己队(A/C)建筑+邻格常亮
   const rev=new Set(); if(CFG.fog){ for(const row of S.tiles) for(const t of row){ if(t&&t.building&&TEAM[t.building.owner]==='blue'){ rev.add(t.r*CFG.cols+t.c); for(const n of neighbors(t.c,t.r)) rev.add(n.r*CFG.cols+n.c); } } }
   for(let r=0;r<CFG.rows;r++) for(let c=0;c<CFG.cols;c++){ const t=S.tiles[r][c]; if(!t) continue; const {x,y}=center(c,r);
@@ -671,9 +702,9 @@ function drawBanner(S){ const now=S.timeMs;
     ctx.strokeStyle='rgba(0,0,0,0.13)'; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.stroke();   // 底环
     if(bp>0){ ctx.strokeStyle='#2f7ed8'; ctx.beginPath(); ctx.arc(p.x,p.y,R, Math.PI/2 - bp*Math.PI/2, Math.PI/2 + bp*Math.PI/2); ctx.stroke(); }   // 下半：从正下方向两侧
     if(rp>0){ ctx.strokeStyle='#d64545'; ctx.beginPath(); ctx.arc(p.x,p.y,R, -Math.PI/2 - rp*Math.PI/2, -Math.PI/2 + rp*Math.PI/2); ctx.stroke(); }  // 上半：从正上方向两侧
-    ctx.font='bold 11px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    if(rp>0){ ctx.fillStyle='#d64545'; ctx.fillText(Math.ceil((1-rp)*CFG.baseFillSec)+'s', p.x, p.y-R-10); }   // 红方还差几秒占满(圈上方)
-    if(bp>0){ ctx.fillStyle='#2f7ed8'; ctx.fillText(Math.ceil((1-bp)*CFG.baseFillSec)+'s', p.x, p.y+R+10); }   // 蓝方(圈下方)
+    ctx.font='bold 11px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,0.92)'; ctx.lineJoin='round';
+    if(rp>0){ const s=Math.ceil((1-rp)*CFG.baseFillSec)+'s'; ctx.strokeText(s,p.x,p.y-R-10); ctx.fillStyle='#d64545'; ctx.fillText(s,p.x,p.y-R-10); }   // 红方还差几秒占满(圈上方,描边)
+    if(bp>0){ const s=Math.ceil((1-bp)*CFG.baseFillSec)+'s'; ctx.strokeText(s,p.x,p.y+R+10); ctx.fillStyle='#2f7ed8'; ctx.fillText(s,p.x,p.y+R+10); }   // 蓝方(圈下方,描边)
     ctx.textBaseline='alphabetic'; ctx.restore();
   }
   if(S.flipFx && now<S.flipFx.until){ const rem=S.flipFx.until-now; bannerText('🐉 传说降临 · 抽到巨龙！','#ffd76b',CH*0.24,Math.min(1,rem/500),true); }
@@ -681,10 +712,35 @@ function drawBanner(S){ const now=S.timeMs;
 }
 
 /* ---------------- INPUT ---------------- */
-function canvasPos(ev){ const rect=cv.getBoundingClientRect(); const sx=CW/rect.width; const cy=(ev.clientY-rect.top)*(CH/rect.height); return {cx:(ev.clientX-rect.left)*sx, cy}; }
-cv.addEventListener('click',ev=>{ if(!G||G.over) return; const {cx,cy}=canvasPos(ev); const h=pixelToHex(cx,cy); if(h) SIM.flip(G,'A',h.c,h.r); });
-cv.addEventListener('mousemove',ev=>{ if(!G) return; const {cx,cy}=canvasPos(ev); hover=pixelToHex(cx,cy); });
-cv.addEventListener('mouseleave',()=>hover=null);
+function canvasPos(ev){ const rect=cv.getBoundingClientRect(); return { cx:((ev.clientX-rect.left)-CAM.x)/CAM.s, cy:((ev.clientY-rect.top)-CAM.y)/CAM.s }; }   // 屏幕→世界(相机逆变换)
+let suppressClick=false, mDrag=null;
+cv.addEventListener('click',ev=>{ if(suppressClick){ suppressClick=false; return; } if(!G||G.over) return; const {cx,cy}=canvasPos(ev); const h=pixelToHex(cx,cy); if(h) SIM.flip(G,'A',h.c,h.r); });
+cv.addEventListener('mousedown',ev=>{ mDrag={x:ev.clientX,y:ev.clientY,moved:0}; });
+cv.addEventListener('mousemove',ev=>{ if(mDrag){ const dx=ev.clientX-mDrag.x, dy=ev.clientY-mDrag.y; mDrag.x=ev.clientX; mDrag.y=ev.clientY; mDrag.moved+=Math.abs(dx)+Math.abs(dy); if(mDrag.moved>8){ CAM.x+=dx; CAM.y+=dy; clampCam(); suppressClick=true; } } if(!G) return; const {cx,cy}=canvasPos(ev); hover=pixelToHex(cx,cy); });
+window.addEventListener('mouseup',()=>{ mDrag=null; });
+cv.addEventListener('mouseleave',()=>{ hover=null; mDrag=null; });
+cv.addEventListener('wheel',ev=>{ ev.preventDefault(); const rect=cv.getBoundingClientRect(); const mx=ev.clientX-rect.left, my=ev.clientY-rect.top; const f=ev.deltaY<0?1.12:1/1.12; const s2=Math.max(CAM.min,Math.min(CAM.max,CAM.s*f)); const wx=(mx-CAM.x)/CAM.s, wy=(my-CAM.y)/CAM.s; CAM.s=s2; CAM.x=mx-wx*s2; CAM.y=my-wy*s2; clampCam(); },{passive:false});
+/* 手机触控：单指拖动平移(轻点=翻地)、双指捏合缩放(以两指中点为锚) */
+let tState=null;
+cv.addEventListener('touchstart',ev=>{ ev.preventDefault();
+  if(ev.touches.length===1){ const t=ev.touches[0]; tState={mode:'pan',x:t.clientX,y:t.clientY,sx:t.clientX,sy:t.clientY,moved:0}; }
+  else if(ev.touches.length>=2){ const a=ev.touches[0],b=ev.touches[1]; tState={mode:'pinch',d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),s0:CAM.s}; }
+},{passive:false});
+cv.addEventListener('touchmove',ev=>{ ev.preventDefault(); if(!tState) return;
+  if(ev.touches.length===1 && tState.mode==='pan'){ const t=ev.touches[0]; const dx=t.clientX-tState.x, dy=t.clientY-tState.y; tState.x=t.clientX; tState.y=t.clientY; tState.moved+=Math.abs(dx)+Math.abs(dy); if(tState.moved>8){ CAM.x+=dx; CAM.y+=dy; clampCam(); } }
+  else if(ev.touches.length>=2){ const a=ev.touches[0],b=ev.touches[1]; const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    if(tState.mode!=='pinch'){ tState={mode:'pinch',d,s0:CAM.s}; return; }
+    const rect=cv.getBoundingClientRect(); const mx=(a.clientX+b.clientX)/2-rect.left, my=(a.clientY+b.clientY)/2-rect.top;
+    const s2=Math.max(CAM.min,Math.min(CAM.max, tState.s0*d/tState.d));
+    const wx=(mx-CAM.x)/CAM.s, wy=(my-CAM.y)/CAM.s; CAM.s=s2; CAM.x=mx-wx*s2; CAM.y=my-wy*s2; clampCam(); }
+},{passive:false});
+cv.addEventListener('touchend',ev=>{ ev.preventDefault();
+  if(tState && tState.mode==='pan' && tState.moved<8 && ev.touches.length===0 && G && !G.over){   // 轻点＝翻地建造
+    const rect=cv.getBoundingClientRect(); const wx=((tState.sx-rect.left)-CAM.x)/CAM.s, wy=((tState.sy-rect.top)-CAM.y)/CAM.s;
+    const h=pixelToHex(wx,wy); if(h) SIM.flip(G,'A',h.c,h.r);
+  }
+  if(ev.touches.length===0) tState=null;
+},{passive:false});
 document.querySelectorAll('#cmdBar .cmd').forEach(b=>b.onclick=()=>{ if(!G) return; G.cmd=b.getAttribute('data-cmd'); document.querySelectorAll('#cmdBar .cmd').forEach(x=>x.classList.toggle('on', x===b)); if(G.events) G.events.push({event:'command_issued', cmd:G.cmd, gameTimeMs:G.timeMs}); });
 document.querySelectorAll('.js-deck').forEach(b=>b.onclick=()=>{ paused=true; buildDeck(); document.getElementById('deckModal').style.display='flex'; });
 document.getElementById('deckClose').onclick=()=>{ document.getElementById('deckModal').style.display='none'; paused=false; };
