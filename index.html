@@ -113,13 +113,13 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v1.1 · 更新 2026-07-16';
+const APP_VERSION='v0.1.1 · 更新 2026-07-16 15:17';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:21, block:7,                 // 21×21 切 3×3 个 7×7 区块，取十字五区为可玩区（每家 7×7）
   cols:21, rows:21,
   durationSec:300, startGems:15, spawnIntervalMult:2.857, unitCapPerPlayer:9,
-  cityGemPerSec:0.8, mineGemPerSec:0.42, gemLump:5, comeback:{perBuilding:0.14, cap:0.7}, fog:true, fogRevealMs:3000,
-  baseFillSec:48, baseDrainPerSec:1.2, baseShieldSec:30,   // 占领：独占中心约 48s 拉满（再延长一倍，胜负不那么快）；前 30s 大本营有护罩
+  cityGemPerSec:1.0, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7}, fog:true, fogRevealMs:3000,
+  baseFillSec:60, baseDrainPerSec:1.2, baseShieldSec:30,   // 占领：独占中心 60s 拉满才算赢；前 30s 大本营有护罩
   tileTypeRatio:{barracks:.50, question:.30, tower:.15, mine:.05},
   barracksPriceDist:{15:.60,25:.30,50:.10},
   prices:{question:5, mine:15, tower:15},
@@ -132,7 +132,7 @@ const CFG = {
   towerDist:{tower_arrow:.65, tower_bolt:.35},
   troops:{
     militia:{name:'民兵',rarity:'common',bhp:90,spawn:2000,hp:60,atk:5,range:1,ai:800,mv:1750,aoe:false},
-    archer :{name:'弓兵',rarity:'common',bhp:90,spawn:2500,hp:45,atk:28,range:2,ai:2000,mv:2188,aoe:false},
+    archer :{name:'弓兵',rarity:'common',bhp:90,spawn:2500,hp:45,atk:22,range:2,ai:2000,mv:2188,aoe:false},
     cavalry:{name:'骑兵',rarity:'rare',bhp:110,spawn:3000,hp:110,atk:40,range:1,ai:1500,mv:1750,aoe:false},
     mage   :{name:'法师',rarity:'epic',bhp:85,spawn:4000,hp:70,atk:60,range:2,ai:3000,mv:3250,aoe:true,splash:1,windup:1000},
     dragon :{name:'巨龙',rarity:'legendary',bhp:160,spawn:12000,hp:700,atk:130,range:2,ai:4000,mv:2000,aoe:false,
@@ -658,13 +658,16 @@ function drawBanner(S){ const now=S.timeMs;
     ctx.lineWidth=2; ctx.strokeStyle='rgba(80,140,240,0.75)'; ctx.setLineDash([5,3]); ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle='#2c5fb0'; ctx.font='bold 12px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🛡 '+rem+'s',p.x,p.y); ctx.textBaseline='alphabetic';
     ctx.restore();
-  } else if(S.base.blue>0 || S.base.red>0){   // 占领进度圈：下半蓝(蓝方进度) / 上半红(红方进度)，各从中点向两侧生长；半满=各自50%，某半整段满=该方100%获胜
+  } else if(S.base.blue>0 || S.base.red>0){   // 占领进度圈：下半蓝(蓝方进度) / 上半红(红方进度)；旁附各自"还差几秒占满"倒计时
     const p=BASE_PX, R=SIZE*1.55; const bp=Math.max(0,Math.min(1,S.base.blue/100)), rp=Math.max(0,Math.min(1,S.base.red/100));
     ctx.save(); ctx.lineWidth=4.5; ctx.lineCap='butt';
     ctx.strokeStyle='rgba(0,0,0,0.13)'; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.stroke();   // 底环
     if(bp>0){ ctx.strokeStyle='#2f7ed8'; ctx.beginPath(); ctx.arc(p.x,p.y,R, Math.PI/2 - bp*Math.PI/2, Math.PI/2 + bp*Math.PI/2); ctx.stroke(); }   // 下半：从正下方向两侧
     if(rp>0){ ctx.strokeStyle='#d64545'; ctx.beginPath(); ctx.arc(p.x,p.y,R, -Math.PI/2 - rp*Math.PI/2, -Math.PI/2 + rp*Math.PI/2); ctx.stroke(); }  // 上半：从正上方向两侧
-    ctx.restore();
+    ctx.font='bold 11px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(rp>0){ ctx.fillStyle='#d64545'; ctx.fillText(Math.ceil((1-rp)*CFG.baseFillSec)+'s', p.x, p.y-R-10); }   // 红方还差几秒占满(圈上方)
+    if(bp>0){ ctx.fillStyle='#2f7ed8'; ctx.fillText(Math.ceil((1-bp)*CFG.baseFillSec)+'s', p.x, p.y+R+10); }   // 蓝方(圈下方)
+    ctx.textBaseline='alphabetic'; ctx.restore();
   }
   if(S.flipFx && now<S.flipFx.until){ const rem=S.flipFx.until-now; bannerText('🐉 传说降临 · 抽到巨龙！','#ffd76b',CH*0.24,Math.min(1,rem/500),true); }
   if(S.heroFx && now<S.heroFx.until){ const rem=S.heroFx.until-now; const mine=TEAM[S.heroFx.side]==='blue'; bannerText(mine?'⚡ 巨龙出击 ⚡':'⚠ 敌方巨龙来袭 ⚠', mine?'#3f93ea':'#e05555', CH*0.33, Math.min(1,rem/400), false); }
