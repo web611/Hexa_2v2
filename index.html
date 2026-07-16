@@ -101,7 +101,7 @@
           </div>
           <div>
             <b style="color:#26261f;">注意要点</b><br>
-            · 开局 <b>30 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>，谁都进不去，先发育。<br>
+            · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>，谁都进不去，先发育。<br>
             · 大本营<b>只能进 1 个兵</b>驻守：切「抢营」后会自动派 1 个兵进驻（优先法师），其余部队在外圈护卫；驻军<b>受伤减半、远程射程+1</b>；<b>巨龙不能进</b>大本营。<br>
             · 外部攻打大本营的兵只能<b>贴着六角形边缘</b>打，打死驻军后己方才能进驻。<br>
             · 中间<b>未占领的灰色地块可以直接翻地建造</b>，建成即归你——把兵营铺向中路是取胜关键。<br>
@@ -132,13 +132,13 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.2.0 · 更新 2026-07-16 16:00';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.3.2 · 更新 2026-07-16 16:20';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
-  grid:21, block:7,                 // 21×21 切 3×3 个 7×7 区块，取十字五区为可玩区（每家 7×7）
-  cols:21, rows:21,
+  grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
+  cols:27, rows:27,
   durationSec:300, startGems:15, spawnIntervalMult:2.857, unitCapPerPlayer:9,
-  cityGemPerSec:1.0, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7}, fog:true, fogRevealMs:3000,
-  baseFillSec:60, baseDrainPerSec:1.2, baseShieldSec:30,   // 占领：独占中心 60s 拉满才算赢；前 30s 大本营有护罩
+  cityGemPerSec:1.0, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7, minGap:3}, fog:true, fogRevealMs:3000,
+  baseFillSec:60, baseDrainPerSec:1.2, baseShieldSec:60,   // 占领：独占中心 60s 拉满才算赢；前 60s 大本营有护罩
   tileTypeRatio:{barracks:.50, question:.30, tower:.15, mine:.05},
   barracksPriceDist:{15:.60,25:.30,50:.10},
   prices:{question:5, mine:15, tower:15},
@@ -163,8 +163,8 @@ const CFG = {
     50:{militia:.06,archer:.12,cavalry:.27,mage:.35,dragon:.20}
   },
   questionDist:{outpost:.80,mine:.03,tower:.04,militia:.05,archer:.03,cavalry:.025,mage:.015,dragon:.01},
-  perception:4, priorityD:8, engageRange:4, contactPx:24, projSpeed:{arrow:0.85, magic:0.4, fire:0.6, bolt:0.65},
-  dragonMinBuildings:10, dragonEarlyKeepChance:0.08
+  perception:4, priorityD:8, engageRange:4, contactPx:24, projSpeed:{arrow:0.595, magic:0.28, fire:0.42, bolt:0.455},   // 弹道飞行速度已整体减速30%(×0.7)，便于看清；攻速/出手频率不变
+  dragonEarlySec:60, dragonEarlyKeepChance:0.08
 };
 const TROOP_IDS = ['militia','archer','cavalry','mage','dragon'];
 
@@ -198,14 +198,14 @@ function homeOwner(c,r){ const b=blockOf(c,r);
   if(b[0]===2 && b[1]===1) return 'D';   // 右＝敌
   return 'N';                            // 中央区＝中立
 }
-const CENTER_CR={c:10,r:10};                   // 大本营正中（唯一居中格，四家近似等距）
-const BASE_CELLS=[[10,10]];                     // 核心 objective 格（不可建造，★，单兵驻守）
+const CENTER_CR={c:13,r:13};                   // 大本营正中（唯一居中格，四家近似等距）
+const BASE_CELLS=[[13,13]];                     // 核心 objective 格（不可建造，★，单兵驻守）
 const BASE_SET=new Set(BASE_CELLS.map(([c,r])=>r*CFG.cols+c));
 const isBaseCell=(c,r)=>BASE_SET.has(r*CFG.cols+c);
-const BASE_PX=center(10,10);
-const RING_SET=new Set(ODDR[10&1].map(([dc,dr])=>(10+dr)*CFG.cols+(10+dc)));  // 中心一圈（视觉标示争夺区）
-const RING_CELLS=ODDR[10&1].map(([dc,dr])=>[10+dc,10+dr]).filter(([c,r])=>playable(c,r));
-const CITY_AT={ A:[10,19], C:[10,1], B:[2,10], D:[18,10] };   // 四家主城；左右两家内移 1 列，抵消 odd-r 下横向行军更慢，四家到大本营距离基本相等
+const BASE_PX=center(13,13);
+const RING_SET=new Set(ODDR[CENTER_CR.r&1].map(([dc,dr])=>(CENTER_CR.r+dr)*CFG.cols+(CENTER_CR.c+dc)));  // 中心一圈（视觉标示争夺区）
+const RING_CELLS=ODDR[CENTER_CR.r&1].map(([dc,dr])=>[CENTER_CR.c+dc,CENTER_CR.r+dr]).filter(([c,r])=>playable(c,r));
+const CITY_AT={ A:[13,23], C:[13,3], B:[3,13], D:[23,13] };   // 四家主城统一：各区块居中、距外边缘倒数第4行/列
 
 function neighbors(c,r){ return ODDR[r&1].map(([dc,dr])=>({c:c+dc,r:r+dr})).filter(n=>playable(n.c,n.r)); }
 function pixelToHex(px,py){ let best=null,bd=1e9; const rr=Math.round((py-OY)/DY); for(let r=rr-1;r<=rr+1;r++){ if(r<0||r>=CFG.rows) continue; const cc=Math.round((px-OX-(r&1)*(DX/2))/DX); for(let c=cc-1;c<=cc+1;c++){ if(c<0||c>=CFG.cols) continue; const ct=center(c,r), d=(ct.x-px)**2+(ct.y-py)**2; if(d<bd){bd=d;best={c,r};} } } if(!best||bd>(SIZE*SIZE)||!playable(best.c,best.r)) return null; return best; }
@@ -271,11 +271,15 @@ const SIM = {
   step(S, dt){
     if(S.over) return;
     S.timeMs+=dt;
-    // 经济（落后方追赶：按「队伍」有效建筑数比较）
+    // 经济 + 奋进模式：敌我实力差距过大(有效建筑差 ≥ minGap)时，弱方开启奋进——产宝石加成，规则参考1v1(+14%/每差1建筑，上限+70%)
     const teamB={blue:0,red:0};
     for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(b&&b.kind!=='outpost') teamB[TEAM[b.owner]]++; }
-    const cbMul=(me,opp)=> 1 + Math.min(CFG.comeback.cap, Math.max(0,opp-me)*CFG.comeback.perBuilding);
+    const cbMul=(me,opp)=>{ const gap=Math.max(0,opp-me); if(gap<CFG.comeback.minGap) return 1; return 1 + Math.min(CFG.comeback.cap, gap*CFG.comeback.perBuilding); };
     const mul={blue:cbMul(teamB.blue,teamB.red), red:cbMul(teamB.red,teamB.blue)};
+    const striveNow={blue:mul.blue>1, red:mul.red>1};
+    if(!S._strive) S._strive={blue:false,red:false};
+    if(striveNow.blue && !S._strive.blue) S.striveFx={until:S.timeMs+2400};   // 我方(蓝)开启瞬间横幅提示
+    S._strive=striveNow;
     for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!b) continue; const m=mul[TEAM[b.owner]]; let rate=0; if(b.kind==='city') rate=CFG.cityGemPerSec; else if(b.kind==='mine') rate=CFG.mineGemPerSec; if(rate){ b.gemAcc=(b.gemAcc||0)+rate*m*dt/1000; while(b.gemAcc>=CFG.gemLump){ S.gems[b.owner]+=CFG.gemLump; b.gemAcc-=CFG.gemLump; } } }
     // 出兵（人口上限按玩家；巨龙场上限1、不占人口）
     const uc={A:0,B:0,C:0,D:0}; for(const u of S.units) if(u.hp>0 && u.cardId!=='dragon') uc[u.owner]++;
@@ -369,7 +373,7 @@ function guaranteeBase(S, cityCol, cityRow){
   for(let k=0;k<forced.length && k<ns.length;k++){ const t=S.tiles[ns[k].r][ns[k].c]; if(!t||t.building||t.isBase) continue; t.type=forced[k]; if(forced[k]==='barracks') t.price=15; else delete t.price; }
 }
 function rollNoDragon(S,dist){ const d={}; for(const k in dist) if(k!=='dragon') d[k]=dist[k]; return S.rng.weighted(d); }
-function gateDragon(S,player,id,dist){ if(id==='dragon' && (S.builtCount[player]||0) < CFG.dragonMinBuildings && S.rng.next() >= CFG.dragonEarlyKeepChance) return rollNoDragon(S,dist); return id; }
+function gateDragon(S,player,id,dist){ if(id==='dragon' && S.timeMs < CFG.dragonEarlySec*1000 && S.rng.next() >= CFG.dragonEarlyKeepChance) return rollNoDragon(S,dist); return id; }
 function mkMine(o){ return {kind:'mine',owner:o,hp:CFG.mine.hp,maxHp:CFG.mine.hp}; }
 function mkOutpost(o){ return {kind:'outpost',owner:o,hp:CFG.outpost.hp,maxHp:CFG.outpost.hp}; }
 function mkTower(o,id){ const s=CFG.towers[id]; return {kind:'tower',cardId:id,owner:o,hp:s.hp,maxHp:s.hp,atkCd:0}; }
@@ -674,12 +678,12 @@ function render(S){
 }
 function drawGemLabels(S){
   // 各自地盘边上的宝石数：我方(下臂)左下 / 友方(上臂)左上 / 左敌(左臂)左下 / 右敌(右臂)右下
-  const L=[ {p:'A', name:'我方', at:center(4,19)},     // 下臂左侧空区(左下)
-            {p:'C', name:'队友', at:center(4,1)},      // 上臂左侧空区(左上)
-            {p:'B', name:'敌方', at:center(2,15)},     // 左臂下方空区(左下)
-            {p:'D', name:'敌方', at:center(18,15)} ];  // 右臂下方空区(右下)
+  const L=[ {p:'A', name:'我方', at:center(5,24)},     // 下臂左侧空区(左下)
+            {p:'C', name:'队友', at:center(5,2)},      // 上臂左侧空区(左上)
+            {p:'B', name:'敌方', at:center(4,19)},     // 左臂下方空区(左下)
+            {p:'D', name:'敌方', at:center(23,19)} ];  // 右臂下方空区(右下)
   ctx.save(); ctx.font='bold 13px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  for(const e of L){ const col=OWN[e.p].fill; ctx.fillStyle=col; ctx.fillText(e.name+' ◆'+Math.floor(S.gems[e.p]), e.at.x, e.at.y); }
+  for(const e of L){ const col=OWN[e.p].fill; const fire=(S._strive && S._strive[TEAM[e.p]])?' 🔥':''; ctx.fillStyle=col; ctx.fillText(e.name+' ◆'+Math.floor(S.gems[e.p])+fire, e.at.x, e.at.y); }
   ctx.restore();
 }
 function bannerText(text,color,y,alpha,big){ ctx.save(); ctx.globalAlpha=Math.max(0,Math.min(1,alpha)); ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -707,6 +711,7 @@ function drawBanner(S){ const now=S.timeMs;
     if(bp>0){ const s=Math.ceil((1-bp)*CFG.baseFillSec)+'s'; ctx.strokeText(s,p.x,p.y+R+10); ctx.fillStyle='#2f7ed8'; ctx.fillText(s,p.x,p.y+R+10); }   // 蓝方(圈下方,描边)
     ctx.textBaseline='alphabetic'; ctx.restore();
   }
+  if(S.striveFx && now<S.striveFx.until){ const rem=S.striveFx.until-now; bannerText('🔥 奋进模式开启 · 产宝石加速！','#f0a838',CH*0.42,Math.min(1,rem/400),false); }
   if(S.flipFx && now<S.flipFx.until){ const rem=S.flipFx.until-now; bannerText('🐉 传说降临 · 抽到巨龙！','#ffd76b',CH*0.24,Math.min(1,rem/500),true); }
   if(S.heroFx && now<S.heroFx.until){ const rem=S.heroFx.until-now; const mine=TEAM[S.heroFx.side]==='blue'; bannerText(mine?'⚡ 巨龙出击 ⚡':'⚠ 敌方巨龙来袭 ⚠', mine?'#3f93ea':'#e05555', CH*0.33, Math.min(1,rem/400), false); }
 }
@@ -769,8 +774,7 @@ function buildProb(){ const g=document.getElementById('probGrid');
     card('兵营 → 出兵','占地块 '+pc(CFG.tileTypeRatio.barracks),['价15（'+pc(bp[15])+'）：'+dist(bb[15]),'价25（'+pc(bp[25])+'）：'+dist(bb[25]),'价50（'+pc(bp[50])+'）：'+dist(bb[50])]),
     card('塔 → 防御塔','占地块 '+pc(CFG.tileTypeRatio.tower),[dist(CFG.towerDist)]),
     card('宝矿','占地块 '+pc(CFG.tileTypeRatio.mine),['宝矿 100%']),
-    card('问号 → 开出','占地块 '+pc(CFG.tileTypeRatio.question),[dist(CFG.questionDist)]),
-    card('⚡ 巨龙前期限制','',['己方建筑数 &lt; '+CFG.dragonMinBuildings+' 时，抽到巨龙有 '+pc(1-CFG.dragonEarlyKeepChance)+' 概率被降级重抽。']) ].join('');
+    card('问号 → 开出','占地块 '+pc(CFG.tileTypeRatio.question),[dist(CFG.questionDist)]) ].join('');
 }
 function buildDeck(){ const g=document.getElementById('deckGrid'); const m=CFG.spawnIntervalMult; const RR={common:'普',rare:'稀',epic:'史',legendary:'传'}; const r1=x=>Math.round(x*10)/10;
   const card=(name,rar,price,stats)=>`<div class="dcard rc-${rar}"><div class="dhead"><span class="dname">${name}</span><span class="drar">${RR[rar]}</span><span class="dprice">${price}</span></div>${stats.map(s=>`<div class="dstat">${s}</div>`).join('')}</div>`;
