@@ -66,7 +66,7 @@
       <button data-cmd="right" class="cmd">攻右 ▶</button>
     </div>
     <div class="hud-bot">
-      <span class="gem">◆ 宝石 <b id="gemA">15</b></span>
+      <span class="gem" id="verInfo" style="color:#8f8d84;font-size:12px;">v—</span>
       <div style="display:flex;gap:8px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button></div>
     </div>
     <div id="deckModal" style="display:none;z-index:30;" class="modal-bg">
@@ -113,6 +113,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
+const APP_VERSION='v1.1 · 更新 2026-07-16';
 const CFG = {
   grid:21, block:7,                 // 21×21 切 3×3 个 7×7 区块，取十字五区为可玩区（每家 7×7）
   cols:21, rows:21,
@@ -518,20 +519,21 @@ const AI={ cd:{B:0,C:0,D:0}, cmdCd:0,
     for(let build=0; build<3; build++){   // 一个tick尽量多建，消化盈余宝石（canFlip 已保证买得起）
       let mines=0, barr=0, tow=0; const myB=[]; const tb={blue:0,red:0};
       for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!b) continue; if(b.kind!=='outpost') tb[TEAM[b.owner]]++; if(b.owner===p){ myB.push(t); if(b.kind==='mine')mines++; else if(b.kind==='barracks')barr++; else if(b.kind==='tower')tow++; } }
-      // 局势评估：敌军离我方建筑最近多少格、多少敌军正逼近——只有真被压上门才需要塔
+      // 局势评估：只有敌军真打到家门口(≤3格)才需要塔；中路交战不算
       let dangerDist=1e9, nearEnemies=0, threatEnemy=null;
-      for(const u of S.units){ if(!isEnemy(u.owner,p)||u.hp<=0) continue; let dm=1e9; for(const b of myB){ const d=hexDist(u.c,u.r,b.c,b.r); if(d<dm)dm=d; } if(dm<dangerDist){dangerDist=dm; threatEnemy=u;} if(dm<=6)nearEnemies++; }
-      const threatened = dangerDist<=6;                                        // 敌军已逼近本方建筑(≤6格)才算有威胁
-      const towerCap   = Math.min(4, Math.ceil(nearEnemies/2));                 // 威胁越大允许越多塔，最多4
-      const wantTower  = threatened && tow < Math.max(1, towerCap);            // 局势不危险→根本不造塔（不在后方浪费）
+      for(const u of S.units){ if(!isEnemy(u.owner,p)||u.hp<=0) continue; let dm=1e9; for(const b of myB){ const d=hexDist(u.c,u.r,b.c,b.r); if(d<dm)dm=d; } if(dm<dangerDist){dangerDist=dm; threatEnemy=u;} if(dm<=3)nearEnemies++; }
+      const threatened = dangerDist<=3;                                        // 敌军已打到家门口才算威胁
+      const wantTower  = threatened && tow < Math.min(2, Math.ceil(nearEnemies/3)+1);   // 塔从紧：家被打才建、最多2座
       const wantMine   = mines < Math.ceil(barr*0.6)+1;                          // 经济与出兵同步
-      // 分类型挑：矿/兵营挑最便宜(靠家、安全)；塔挑最靠近来敌处(前沿拦截，绝不建在后方)
-      let bMine=null,bBarr=null,bTow=null, cM=1e9,cB=1e9,kT=1e9;
+      // 取胜要点＝抢占中间地块：矿/兵营挑「最靠中路且买得起」的格(含未占领的中立地)，把产能压向中间；塔挑最贴来敌处
+      let bMine=null,bBarr=null,bTow=null, sM=-1e9,sB=-1e9,kT=1e9;
       for(const row of S.tiles) for(const t of row){ if(!t) continue; if(!SIM.canFlip(S,p,t.c,t.r)) continue;
         const cost=SIM.cost(S,p,t.c,t.r).final;
-        if(t.type==='mine'){ if(cost<cM){cM=cost;bMine=t;} }
-        else if(t.type==='barracks'){ if(cost<cB){cB=cost;bBarr=t;} }
-        else if(t.type==='tower' && wantTower && threatEnemy){                  // 只有需要塔时才评估塔位：离来敌越近越好(挡在来路上)
+        const fw=13-hexDist(t.c,t.r,CENTER_CR.c,CENTER_CR.r);                   // 越靠中心分越高
+        const sc=fw*3 + (t.owner==='N'?4:0) - cost*0.18;                        // 中立地块额外加分(占地=地盘+前沿出兵点)
+        if(t.type==='mine'){ if(sc>sM){sM=sc;bMine=t;} }
+        else if(t.type==='barracks'){ if(sc>sB){sB=sc;bBarr=t;} }
+        else if(t.type==='tower' && wantTower && threatEnemy){                  // 只有家被打才评估塔位：贴着来敌挡路
           const key=hexDist(threatEnemy.c,threatEnemy.r,t.c,t.r);
           if(key<kT){kT=key;bTow=t;}
         }
@@ -629,7 +631,18 @@ function render(S){
     if(u.winding){ const wsp=CFG.troops[u.cardId]; const pr=wsp.windup?1-Math.max(0,u.windCd)/wsp.windup:0; ctx.save(); ctx.lineWidth=2.6; ctx.strokeStyle='#8f7bff'; ctx.beginPath(); ctx.arc(x,y,12.5,-Math.PI/2,-Math.PI/2+2*Math.PI*Math.max(0,Math.min(1,pr))); ctx.stroke(); ctx.restore(); } }
   // 悬停 +x（仅自己可翻的格）
   if(hover){ const ht=S.tiles[hover.r] && S.tiles[hover.r][hover.c]; if(ht && SIM.canFlip(S,'A',hover.c,hover.r)){ const {base,final}=SIM.cost(S,'A',hover.c,hover.r); const extra=final-base; if(extra>0){ const {x,y}=center(hover.c,hover.r); ctx.fillStyle='#fff'; ctx.strokeStyle='#b9b7ad'; ctx.lineWidth=1; const w=30,h=15,bx=x-w/2,by=y-SIZE-16; ctx.beginPath(); ctx.roundRect?ctx.roundRect(bx,by,w,h,4):ctx.rect(bx,by,w,h); ctx.fill(); ctx.stroke(); ctx.fillStyle='#c23b3b'; ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.fillText('+'+extra,x,by+11); } } }
+  drawGemLabels(S);
   drawBanner(S);
+}
+function drawGemLabels(S){
+  // 各自地盘边上的宝石数：我方(下臂)左下 / 友方(上臂)左上 / 左敌(左臂)左下 / 右敌(右臂)右下
+  const L=[ {p:'A', name:'我方', at:center(4,19)},     // 下臂左侧空区(左下)
+            {p:'C', name:'队友', at:center(4,1)},      // 上臂左侧空区(左上)
+            {p:'B', name:'敌方', at:center(2,15)},     // 左臂下方空区(左下)
+            {p:'D', name:'敌方', at:center(18,15)} ];  // 右臂下方空区(右下)
+  ctx.save(); ctx.font='bold 13px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const e of L){ const col=OWN[e.p].fill; ctx.fillStyle=col; ctx.fillText(e.name+' ◆'+Math.floor(S.gems[e.p]), e.at.x, e.at.y); }
+  ctx.restore();
 }
 function bannerText(text,color,y,alpha,big){ ctx.save(); ctx.globalAlpha=Math.max(0,Math.min(1,alpha)); ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='bold '+(big?24:19)+'px system-ui,sans-serif'; const h=big?46:38; const w=ctx.measureText(text).width+(big?54:38); const bx=CW/2-w/2, by=y-h/2;
@@ -724,7 +737,6 @@ function updateHUD(S){
   document.getElementById('gA').textContent=blue; document.getElementById('gB').textContent=red;
   document.getElementById('uA').textContent=S.units.filter(u=>TEAM[u.owner]==='blue').length; document.getElementById('uB').textContent=S.units.filter(u=>TEAM[u.owner]==='red').length;
   const left=Math.max(0,CFG.durationSec-S.timeMs/1000); document.getElementById('timer').textContent=Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0');
-  document.getElementById('gemA').textContent=Math.floor(S.gems.A);
   const m=TEL.metrics(S); document.getElementById('metrics').innerHTML=Object.entries(m).map(([k,v])=>`<div>${k}：<span>${v}</span></div>`).join('');
   document.getElementById('evtCount').textContent='事件 '+TEL.all.length;
 }
@@ -736,7 +748,7 @@ document.getElementById('replayBtn').onclick=()=>{ TEL.all.push({event:'replay_c
 (function(){ const origStep=SIM.step.bind(SIM); SIM.step=(S,dt)=>{ AI.tick(S,dt); origStep(S,dt); }; })();
 
 /* 启动 */
-setupCanvas(); buildDeck();
+setupCanvas(); buildDeck(); document.getElementById('verInfo').textContent=APP_VERSION;
 let looping=false;
 function beginMatch(){ document.getElementById('startModal').style.display='none'; setupCanvas(); newMatch(); if(!looping){ looping=true; requestAnimationFrame(loop); } }
 document.getElementById('startBtn').onclick=beginMatch;
