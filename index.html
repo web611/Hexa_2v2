@@ -96,7 +96,7 @@
             · 你在<b style="color:#1f6fc4">下方（蓝队）</b>，队友在上方；左右两家是<b style="color:#c23b3b">红队</b>，2v2 对战。<br>
             · <b>点击己方浅色格「翻地建造」</b>：随机开出宝矿（产宝石）/ 兵营（自动出兵）/ 防御塔；离你现有建筑越远造价越贵。<br>
             · 小兵全自动战斗：自动寻敌、走过的空地自动变成你的领地。<br>
-            · 用底部四个指挥键调度全队部队：<b>攻左 / 防守 / 抢营 / 攻右</b>（默认防守：在自家建筑附近巡逻、救援被打的友军）。<br>
+            · 用底部四个指挥键调度全队部队：<b>攻左 / 防守 / 抢营 / 攻右</b>（默认防守：在自家建筑附近巡逻、救援被打的友军；若敌方两家集中大部分兵力围攻我队一家，另一家会自动抽调富余兵力驰援，调够即止、打退后回防）。<br>
             · <b>获胜方式</b>：驻守中央大本营把占领进度圈填满（独占约 60 秒）；或拆光敌队两座主城；5 分钟到时则比占领进度/占地多少。
           </div>
           <div>
@@ -133,7 +133,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.3.6 · 更新 2026-07-17 09:17';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.3.7 · 更新 2026-07-17 10:00';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -436,7 +436,10 @@ function cmdTarget(S,u){
   const team=TEAM[u.owner];
   const cmd = team==='blue' ? (S.cmd||'defend') : (S.aiCmd||'base');
   if(cmd==='base') return baseMarchTarget(S,u);
-  if(cmd==='defend') return defendStation(S,u);
+  if(cmd==='defend'){
+    if(S._rescuers && S._rescuers.has(u) && u._rescueTile){ const p=center(u._rescueTile.c,u._rescueTile.r); return {x:p.x,y:p.y}; }   // 救援：赶往被围攻队友的受威胁建筑
+    return defendStation(S,u);
+  }
   const tgt = cmd==='left'?'B' : cmd==='right'?'D' : (cmd==='A'||cmd==='C'||cmd==='B'||cmd==='D')?cmd : null;   // 攻击某敌方玩家的城
   if(tgt && isEnemy(tgt,u.owner)){ if(cityExists(S,tgt)){ const p=center(...CITY_AT[tgt]); return {x:p.x,y:p.y}; }
     let best=null,bd=1e9; for(const row of S.tiles) for(const t of row){ if(t&&t.building&&isEnemy(t.building.owner,u.owner)){ const d=hexDist(u.c,u.r,t.c,t.r); if(d<bd){bd=d;best=t;} } }
@@ -493,8 +496,8 @@ for(const par of [0,1]){ for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ if
 function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2格)的建筑”，并为每个被威胁建筑指派最近的1个兵去防守
   const thr=new Set();
   for(const e of S.units){ if(e.hp<=0) continue; for(const [dc,dr] of R2OFF[e.r&1]){ const c=e.c+dc, r=e.r+dr; if(c<0||c>=CFG.cols||r<0||r>=CFG.rows) continue; const t=S.tiles[r][c]; if(t&&t.building&&t.building.kind!=='outpost'&&isEnemy(t.building.owner,e.owner)) thr.add(t); } }
-  const th={blue:[],red:[]};
-  for(const row of S.tiles) for(const t of row){ if(!t||!t.building||t.building.kind==='outpost') continue; if(thr.has(t)) th[TEAM[t.building.owner]].push(t); }
+  const th={blue:[],red:[]}; const bOwn={A:[],B:[],C:[],D:[]};
+  for(const row of S.tiles) for(const t of row){ if(!t||!t.building||t.building.kind==='outpost') continue; bOwn[t.building.owner].push(t); if(thr.has(t)) th[TEAM[t.building.owner]].push(t); }
   S._threatB=th;
   // 战力分（按攻防数值）：dps × 耐久系数
   const power=(o)=>{ let s; if(o.kind==='tower')s=CFG.towers[o.cardId]; else if(o.kind==='city')s=CFG.city; else s=CFG.troops[o.cardId]; if(!s||!s.atk)return 0; const dps=s.atk/((s.ai||1000)/1000); return dps*(1+(s.hp||s.bhp||50)/150); };
@@ -502,7 +505,7 @@ function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2
   const guards=new Set();
   for(const u of S.units) u._defendTile=null;
   for(const p of PLAYERS){
-    const myB=[]; for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.owner===p&&t.building.kind!=='outpost') myB.push(t); }
+    const myB=bOwn[p];
     if(!myB.length) continue;
     const attackers=new Set();
     for(const e of S.units){ if(e.hp<=0||!isEnemy(e.owner,p)) continue; for(const b of myB){ if(hexDist(e.c,e.r,b.c,b.r)<=3){ attackers.add(e); break; } } }   // 仅真正逼到家门口(≤3格)才算攻家；中路屯兵不算
@@ -522,6 +525,25 @@ function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2
     }
   }
   S._guards=guards; S._defenders=guards;   // 兼容旧引用
+  // 防守救援策略：敌队把「大部分兵力」(战力占比≥60%)压向我队一家、且该家自保不足时，队友抽调富余兵力驰援——调够即止，压力解除自动回防
+  S._rescuers=new Set(); for(const u of S.units) u._rescueTile=null;
+  const teamUnitPow={blue:0,red:0};
+  for(const u of S.units){ if(u.hp>0) teamUnitPow[TEAM[u.owner]]+=power({cardId:u.cardId}); }
+  for(const team of ['blue','red']){
+    const mates = team==='blue'?['A','C']:['B','D']; const oppTeam=team==='blue'?'red':'blue';
+    for(let i=0;i<2;i++){
+      const p=mates[i], q=mates[1-i]; const myB=bOwn[p]; if(!myB.length) continue;
+      let committed=0, anchor=null, na=1e9;                                             // 压向 p 的敌军战力(≤6格)与集结点
+      for(const e of S.units){ if(e.hp<=0||TEAM[e.owner]!==oppTeam) continue; let dm=1e9,nb=null; for(const b of myB){ const d=hexDist(e.c,e.r,b.c,b.r); if(d<dm){dm=d;nb=b;} } if(dm<=6){ committed+=power({cardId:e.cardId}); if(dm<na){na=dm;anchor=nb;} } }
+      if(!committed || !anchor) continue;
+      if(committed < teamUnitPow[oppTeam]*0.6) continue;                                // 敌方两家的大部分兵力都压过来才触发
+      let selfDef=0; for(const u of S.units){ if(u.hp>0&&u.owner===p) selfDef+=power({cardId:u.cardId}); }
+      for(const b of myB){ if(b.building.kind==='tower'&&hexDist(b.c,b.r,anchor.c,anchor.r)<=4) selfDef+=power(b.building); }
+      if(selfDef >= committed) continue;                                                // 自己顶得住就不动队友
+      const cand=S.units.filter(u=>u.hp>0&&u.owner===q&&!guards.has(u)&&!S._rescuers.has(u)).sort((x,y)=>hexDist(x.c,x.r,anchor.c,anchor.r)-hexDist(y.c,y.r,anchor.c,anchor.r));
+      let add=0; for(const u of cand){ if(selfDef+add>=committed) break; S._rescuers.add(u); u._rescueTile=anchor; add+=power({cardId:u.cardId}); }   // 就近抽调,调够即止
+    }
+  }
   // 抢营驻守：只要该队正在「抢营」(且护罩已开)，立刻指派 1 个(优先法师、非巨龙、非守家兵)去中心驻守；已有本队驻军则维持
   const runner={blue:null,red:null}; const g=S.base.garrison;
   for(const team of ['blue','red']){
