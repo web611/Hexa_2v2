@@ -94,6 +94,7 @@
           <div>
             <b style="color:#26261f;">基础玩法</b><br>
             · 你在<b style="color:#1f6fc4">下方（蓝队）</b>，队友在上方；左右两家是<b style="color:#c23b3b">红队</b>，2v2 对战。<br>
+            · 开局<b>抽图定边</b>：地图旋转约 3 秒（点击可跳过）抽取本局方位，停稳后 3·2·1 倒计时开局——无论抽到哪个方向，你都在下、队友在上。<br>
             · <b>点击己方浅色格「翻地建造」</b>：随机开出宝矿（产宝石）/ 兵营（自动出兵）/ 防御塔；离你现有建筑越远造价越贵。<br>
             · 小兵全自动战斗：自动寻敌、走过的空地自动变成你的领地。<br>
             · 用底部四个指挥键调度全队部队：<b>攻左 / 防守 / 抢营 / 攻右</b>（默认防守：在自家建筑附近巡逻、救援被打的友军；若敌方两家集中大部分兵力围攻我队一家，另一家会自动抽调富余兵力驰援，调够即止、打退后回防）。<br>
@@ -102,7 +103,8 @@
           <div>
             <b style="color:#26261f;">注意要点</b><br>
             · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>：整个圈子不可穿越，兵会绕道走，先发育。<br>
-            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>直到追回差距；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
+            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>直到追回差距；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
+            · 敌方占领<b>倒计时低于 20 秒</b>时，全队自动进入<b>紧急抢营</b>：无视打不到自己的敌人直冲中路、拆除中路敌方建筑、集中火力打大本营驻军（敌我同规则）。<br>
             · 大本营<b>只能进 1 个兵</b>驻守：切「抢营」后会自动派 1 个兵进驻（优先法师），其余部队在外圈护卫；驻军<b>受伤减半、远程射程+1</b>；<b>巨龙不能进</b>大本营。<br>
             · 外部攻打大本营的兵只能<b>贴着六角形边缘</b>打，打死驻军后己方才能进驻。<br>
             · 中间<b>未占领的灰色地块可以直接翻地建造</b>，建成即归你——把兵营铺向中路是取胜关键。<br>
@@ -133,17 +135,17 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.3.7 · 更新 2026-07-17 10:00';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.9 · 更新 2026-07-17 16:48';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
-  durationSec:300, startGems:15, spawnIntervalMult:2.857, unitCapPerPlayer:9,
+  durationSec:300, startGems:15, spawnIntervalMult:2.857, unitCapPerTeam:100,
   cityGemPerSec:1.0, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7, minGap:3}, fog:true, fogRevealMs:3000,
   baseFillSec:60, baseDrainPerSec:1.2, baseShieldSec:60,   // 占领：独占中心 60s 拉满才算赢；前 60s 大本营有护罩
   tileTypeRatio:{barracks:.50, question:.30, tower:.15, mine:.05},
   barracksPriceDist:{15:.60,25:.30,50:.10},
   prices:{question:5, mine:15, tower:15},
-  distFactor:.5, rebuildCooldownMs:10000, rebuildScope:'both', moveSpeedMult:1.0,
+  distFactor:.5, rebuildCooldownMs:10000, rebuildScope:'both', moveSpeedMult:1.0, teamMoveMult:{blue:1.0, red:1.0},   // 不做移速补偿(方案B)：轴向近远差由开局抽图随机化，长期公平
   city:{hp:350, atk:18, range:2, ai:1500, aoe:false, splash:0}, mine:{hp:120}, outpost:{hp:30},
   towers:{
     tower_arrow:{name:'箭塔',hp:55,atk:18,range:3,ai:1100,aoe:true,splash:1},
@@ -192,11 +194,19 @@ function hexDist(c1,r1,c2,r2){ const a=toCube(c1,r1), b=toCube(c2,r2); return (M
 /* 十字五区：3×3 区块中，行或列居中的区块可玩 */
 function blockOf(c,r){ return [Math.floor(c/CFG.block), Math.floor(r/CFG.block)]; }
 function playable(c,r){ if(c<0||r<0||c>=CFG.cols||r>=CFG.rows) return false; const b=blockOf(c,r); return b[0]===1||b[1]===1; }
+let AXIS='V';   // 本局轴向(开局抽图)：V=蓝队占竖轴  H=蓝队占横轴(渲染整体旋转90°，保证你永远显示在下、队友在上)
 function homeOwner(c,r){ const b=blockOf(c,r);
-  if(b[1]===0 && b[0]===1) return 'C';   // 上＝队友
-  if(b[1]===2 && b[0]===1) return 'A';   // 下＝你
-  if(b[0]===0 && b[1]===1) return 'B';   // 左＝敌
-  if(b[0]===2 && b[1]===1) return 'D';   // 右＝敌
+  if(AXIS==='V'){
+    if(b[1]===0 && b[0]===1) return 'C';   // 上＝队友
+    if(b[1]===2 && b[0]===1) return 'A';   // 下＝你
+    if(b[0]===0 && b[1]===1) return 'B';   // 左＝敌
+    if(b[0]===2 && b[1]===1) return 'D';   // 右＝敌
+  } else {
+    if(b[0]===0 && b[1]===1) return 'A';   // 左(旋转后显示在下)＝你
+    if(b[0]===2 && b[1]===1) return 'C';   // 右(显示在上)＝队友
+    if(b[1]===2 && b[0]===1) return 'B';   // 下(显示在屏幕右)＝敌
+    if(b[1]===0 && b[0]===1) return 'D';   // 上(显示在屏幕左)＝敌
+  }
   return 'N';                            // 中央区＝中立
 }
 const CENTER_CR={c:13,r:13};                   // 大本营正中（唯一居中格，四家近似等距）
@@ -206,7 +216,17 @@ const isBaseCell=(c,r)=>BASE_SET.has(r*CFG.cols+c);
 const BASE_PX=center(13,13);
 const RING_SET=new Set(ODDR[CENTER_CR.r&1].map(([dc,dr])=>(CENTER_CR.r+dr)*CFG.cols+(CENTER_CR.c+dc)));  // 中心一圈（视觉标示争夺区）
 const RING_CELLS=ODDR[CENTER_CR.r&1].map(([dc,dr])=>[CENTER_CR.c+dc,CENTER_CR.r+dr]).filter(([c,r])=>playable(c,r));
-const CITY_AT={ A:[13,23], C:[13,3], B:[3,13], D:[23,13] };   // 四家主城统一：各区块居中、距外边缘倒数第4行/列
+let CITY_AT={}, GEM_LB=[];
+function applyAxis(){   // 城位：近侧(竖轴)主城退到倒数第3行找平距离差(248 vs 260px)；远侧(横轴)仍倒数第4列
+  if(AXIS==='V'){ CITY_AT={ A:[13,24], C:[13,2], B:[3,13], D:[23,13] };
+    GEM_LB=[{p:'A',name:'我方',cell:[5,24]},{p:'C',name:'队友',cell:[5,2]},{p:'B',name:'敌方',cell:[4,19]},{p:'D',name:'敌方',cell:[23,19]}];
+  } else { CITY_AT={ A:[3,13], C:[23,13], B:[13,24], D:[13,2] };
+    GEM_LB=[{p:'A',name:'我方',cell:[3,3]},{p:'C',name:'队友',cell:[24,3]},{p:'D',name:'敌方',cell:[6,2]},{p:'B',name:'敌方',cell:[6,24]}];   // 屏幕方位: D=左敌(左臂左下) B=右敌(右臂右下)
+  }
+}
+applyAxis();
+function rotPt(p){ return AXIS==='H' ? {x:p.y, y:CW-p.x} : p; }   // 世界→旋转后空间
+const RW=()=>AXIS==='H'?CH:CW, RH=()=>AXIS==='H'?CW:CH;           // 旋转后画布尺寸
 
 function neighbors(c,r){ return ODDR[r&1].map(([dc,dr])=>({c:c+dc,r:r+dr})).filter(n=>playable(n.c,n.r)); }
 function pixelToHex(px,py){ let best=null,bd=1e9; const rr=Math.round((py-OY)/DY); for(let r=rr-1;r<=rr+1;r++){ if(r<0||r>=CFG.rows) continue; const cc=Math.round((px-OX-(r&1)*(DX/2))/DX); for(let c=cc-1;c<=cc+1;c++){ if(c<0||c>=CFG.cols) continue; const ct=center(c,r), d=(ct.x-px)**2+(ct.y-py)**2; if(d<bd){bd=d;best={c,r};} } } if(!best||bd>(SIZE*SIZE)||!playable(best.c,best.r)) return null; return best; }
@@ -215,6 +235,7 @@ function pixelToHex(px,py){ let best=null,bd=1e9; const rr=Math.round((py-OY)/DY
 const SIM = {
   init(seed, ab){
     const rng=makeRNG(seed);
+    AXIS = rng.next()<0.5 ? 'V' : 'H'; applyAxis();   // 抽图定边：50/50
     const tiles=[];
     for(let r=0;r<CFG.rows;r++){ tiles[r]=[]; for(let c=0;c<CFG.cols;c++){
       if(!playable(c,r)){ tiles[r][c]=null; continue; }
@@ -228,7 +249,7 @@ const SIM = {
     const S={ tiles, units:[], projs:[], gems:per(CFG.startGems), timeMs:0, over:false,
       winner:null, winCond:null, nextId:1, seed, ab, rng, mines:per(0), twoMineSide:null,
       flipsSinceLegend:per(0), flipsSinceMine:per(0), events:[], leader:null, builtCount:per(0),
-      base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base' };
+      axis:AXIS, base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base' };
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; place(S, r, c, {kind:'city',owner:p,hp:CFG.city.hp,maxHp:CFG.city.hp}); }
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; guaranteeBase(S, c, r); }
     S.events.push({event:'match_start', mapSeed:seed, ab, mode:'2v2_fourcorner'});
@@ -280,6 +301,7 @@ const SIM = {
     const capSec={blue:S.base.blue*CFG.baseFillSec/100, red:S.base.red*CFG.baseFillSec/100};   // 已抢占时间(秒)
     if(!S._striveSt) S._striveSt={blue:{on:false,meet:0,miss:0}, red:{on:false,meet:0,miss:0}};
     const mul={blue:1, red:1};
+    const meets={};
     for(const team of ['blue','red']){
       const opp=team==='blue'?'red':'blue';
       const c1 = (teamB[opp]-teamB[team]) > 20;
@@ -287,27 +309,44 @@ const SIM = {
       const c3 = (capSec[opp]-capSec[team]) > 15;
       const path1 = ((c1?1:0)+(c2?1:0)+(c3?1:0)) >= 2;
       const path2 = capSec[opp] > 30 && (capSec[opp]-capSec[team]) > 10;
-      const meets = path1 || path2;
-      const st=S._striveSt[team];
-      if(!st.on){ if(meets){ st.meet+=dt; if(st.meet>=2000){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; } } else st.meet=0; }
-      else { if(meets) st.miss=0; else { st.miss+=dt; if(st.miss>=5000){ st.on=false; st.meet=0; } } }
-      if(st.on) mul[team]=2;                                                   // 奋进：产宝石速度提高一倍
+      meets[team] = path1 || path2;
     }
+    // 互斥：双方同时达标 → 只有「兵力更弱」的一方算达标(兵数相同则维持已开启方,否则蓝优先)
+    const weaker = teamU.blue<teamU.red?'blue' : teamU.red<teamU.blue?'red' : (S._striveSt.blue.on?'blue' : S._striveSt.red.on?'red' : 'blue');
+    if(meets.blue && meets.red){ if(weaker==='blue') meets.red=false; else meets.blue=false; }
+    for(const team of ['blue','red']){
+      const st=S._striveSt[team];
+      if(!st.on){ if(meets[team]){ st.meet+=dt; if(st.meet>=2000){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; } } else st.meet=0; }
+      else { if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=5000){ st.on=false; st.meet=0; } } }
+    }
+    if(S._striveSt.blue.on && S._striveSt.red.on){                             // 硬互斥兜底：绝不允许双方同时奋进,关掉兵力强的一方
+      const shut = weaker==='blue' ? 'red' : 'blue';
+      S._striveSt[shut].on=false; S._striveSt[shut].meet=0; S._striveSt[shut].miss=0;
+    }
+    for(const team of ['blue','red']) if(S._striveSt[team].on) mul[team]=2;    // 奋进：产宝石速度提高一倍
     S._strive={blue:S._striveSt.blue.on, red:S._striveSt.red.on};
     for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!b) continue; const m=mul[TEAM[b.owner]]; let rate=0; if(b.kind==='city') rate=CFG.cityGemPerSec; else if(b.kind==='mine') rate=CFG.mineGemPerSec; if(rate){ b.gemAcc=(b.gemAcc||0)+rate*m*dt/1000; while(b.gemAcc>=CFG.gemLump){ S.gems[b.owner]+=CFG.gemLump; b.gemAcc-=CFG.gemLump; } } }
-    // 出兵（人口上限按玩家；巨龙场上限1、不占人口）
+    // 出兵（人口上限按「队伍合计」；巨龙场上限1、不占人口）
     const uc={A:0,B:0,C:0,D:0}; for(const u of S.units) if(u.hp>0 && u.cardId!=='dragon') uc[u.owner]++;
+    const teamCount=(o)=> TEAM[o]==='blue' ? uc.A+uc.C : uc.B+uc.D;
     for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!(b&&b.kind==='barracks')) continue; const iv=CFG.troops[b.cardId].spawn*CFG.spawnIntervalMult;
       if(b.cardId==='dragon'){ const alive=S.units.some(u=>u.owner===b.owner&&u.cardId==='dragon'&&u.hp>0);
         if(alive){ b.spawnCd=iv; b.spawnTotal=iv; continue; }
         b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,'dragon',t.c,t.r); }
-      } else { b.spawnCd-=dt; if(b.spawnCd<=0){ if(uc[b.owner]>=CFG.unitCapPerPlayer) continue; b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,b.cardId,t.c,t.r); uc[b.owner]++; } }
+      } else { b.spawnCd-=dt; if(b.spawnCd<=0){ if(teamCount(b.owner)>=CFG.unitCapPerTeam) continue; b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,b.cardId,t.c,t.r); uc[b.owner]++; } }
     }
     // 子弹
     for(const p of S.projs){ p.t+=dt; if(p.tU && p.tU.hp>0){ p.bx=p.tU.px; p.by=p.tU.py; } if(p.t>=p.dur && !p.done){ p.done=true; projHit(S,p); } }
     S.projs=S.projs.filter(p=>!p.done);
     // 单位：朝最近「敌方」目标直线走；进射程停攻；正前方有建筑绕行；无目标→按指令(自由/抢营/攻左右)
-    computeThreats(S);
+    // 紧急抢营协议：敌方占领倒计时 <20s → 全队压向中路(敌我同规则)
+    const rushPct = 100*(1 - 20/CFG.baseFillSec);
+    S._rush = { blue: S.base.red > rushPct, red: S.base.blue > rushPct };
+    if(!S._rushPrev) S._rushPrev={blue:false,red:false};
+    if(S._rush.blue && !S._rushPrev.blue) S.rushFx={until:S.timeMs+2600, side:'blue'};
+    if(S._rush.red  && !S._rushPrev.red)  S.rushFx={until:S.timeMs+2600, side:'red'};
+    S._rushPrev={blue:S._rush.blue, red:S._rush.red};
+    S._thCd=(S._thCd===undefined?0:S._thCd)-dt; if(S._thCd<=0){ S._thCd=99; computeThreats(S); }   // 角色分配99ms刷新一次足够(兵2s走一格)，省2/3开销
     const blist=[]; for(const row of S.tiles) for(const t of row){ if(t&&t.building) blist.push(t); }
     for(const u of S.units){ if(u.hp<=0) continue; u.atkCd=Math.max(0,(u.atkCd||0)-dt); if(u.isHero) u.heroCd=Math.max(0,(u.heroCd||0)-dt);
       const spec=CFG.troops[u.cardId];
@@ -329,8 +368,13 @@ const SIM = {
       } else if(goer){   // 被指派进营者：无视沿途敌人，径直走向中心占点
         const nx=flowNext(S,u.c,u.r,CENTER_CR.c,CENTER_CR.r,TEAM[u.owner]); if(nx){ const p=center(nx.c,nx.r); gx=p.x; gy=p.y; } else { gx=BASE_PX.x; gy=BASE_PX.y; }
       } else {
-        for(const e of S.units){ if(!isEnemy(e.owner,u.owner)||e.hp<=0) continue; const d=hexDist(u.c,u.r,e.c,e.r); if(d<=CFG.engageRange && d<gd){gd=d;gx=e.px;gy=e.py;} }
-        if(!holdMode) for(const t of blist){ if(t.building && isEnemy(t.building.owner,u.owner)){ const d=hexDist(u.c,u.r,t.c,t.r); if(d<=CFG.engageRange && d<gd){gd=d; const ct=center(t.c,t.r); gx=ct.x; gy=ct.y;} } }   // holdMode 不主动打敌建筑
+        const rush = S._rush && S._rush[TEAM[u.owner]];
+        for(const e of S.units){ if(!isEnemy(e.owner,u.owner)||e.hp<=0) continue; const d=hexDist(u.c,u.r,e.c,e.r);
+          if(rush && e!==S.base.garrison){ const es=CFG.troops[e.cardId]; if(d > Math.max(1,(es&&es.range)||1)) continue; }   // 紧急抢营：打不到我的敌人不理会,继续推进
+          if(d<=CFG.engageRange && d<gd){gd=d;gx=e.px;gy=e.py;} }
+        if(!holdMode || rush) for(const t of blist){ if(t.building && isEnemy(t.building.owner,u.owner)){
+          if(rush && hexDist(t.c,t.r,CENTER_CR.c,CENTER_CR.r)>5) continue;                                                    // 紧急抢营：只拆中路圈内(≤5格)的敌方建筑
+          const d=hexDist(u.c,u.r,t.c,t.r); if(d<=CFG.engageRange && d<gd){gd=d; const ct=center(t.c,t.r); gx=ct.x; gy=ct.y;} } }   // holdMode 不主动打敌建筑(rush例外)
         if(gx===null){ const tp=cmdTarget(S,u); const tc=pixelToHex(tp.x,tp.y); let nx=null; if(tc) nx=flowNext(S,u.c,u.r,tc.c,tc.r,TEAM[u.owner]);
           if(nx){ const p=center(nx.c,nx.r); gx=p.x; gy=p.y; } else { gx=tp.x; gy=tp.y; } }   // 沿可行走路线走向下一格；无路则退回直线
       }
@@ -338,9 +382,14 @@ const SIM = {
       const gRange = spec.range + ((u===S.base.garrison && spec.range>1)?1:0);                          // 驻军远程 +1 射程
       let atkT=null,atkKind=null,atkTile=null,best=-1e9,anyD=1e9,anyT=null,anyKind=null,anyTile=null;
       const melee=spec.range<=1;
-      for(const e of S.units){ if(!isEnemy(e.owner,u.owner)||e.hp<=0) continue; const d=hexDist(u.c,u.r,e.c,e.r); const inR = melee ? Math.hypot(u.px-e.px,u.py-e.py)<=CFG.contactPx : d<=gRange; if(inR){ if(CFG.troops[e.cardId].atk>0){ const sc=CFG.troops[e.cardId].atk-CFG.priorityD*d; if(sc>best){best=sc;atkT=e;atkKind='unit';atkTile=null;} } if(d<anyD){anyD=d;anyT=e;anyKind='unit';anyTile=null;} } }
-      for(const t of blist){ if(t.building && isEnemy(t.building.owner,u.owner)){ const d=hexDist(u.c,u.r,t.c,t.r); const ct=center(t.c,t.r); const inR = melee ? Math.hypot(u.px-ct.x,u.py-ct.y)<=CFG.contactPx+12 : d<=gRange; if(inR && d<anyD){anyD=d;anyT=t.building;anyKind='building';anyTile=t;} } }
-      if(!atkT && anyT && !holdMode){ atkT=anyT; atkKind=anyKind; atkTile=anyTile; }   // holdMode 不主动拆敌建筑(仍会打贴脸敌兵)
+      const rushA = S._rush && S._rush[TEAM[u.owner]]; let garrT=null;
+      for(const e of S.units){ if(!isEnemy(e.owner,u.owner)||e.hp<=0) continue; const d=hexDist(u.c,u.r,e.c,e.r); const inR = melee ? Math.hypot(u.px-e.px,u.py-e.py)<=CFG.contactPx : d<=gRange;
+        if(inR && e===S.base.garrison) garrT=e;
+        if(rushA && e!==S.base.garrison){ const es=CFG.troops[e.cardId]; if(d > Math.max(1,(es&&es.range)||1)) continue; }   // 紧急抢营：打不到我的敌兵不浪费火力
+        if(inR){ if(CFG.troops[e.cardId].atk>0){ const sc=CFG.troops[e.cardId].atk-CFG.priorityD*d; if(sc>best){best=sc;atkT=e;atkKind='unit';atkTile=null;} } if(d<anyD){anyD=d;anyT=e;anyKind='unit';anyTile=null;} } }
+      if(rushA && garrT){ atkT=garrT; atkKind='unit'; atkTile=null; }                                                        // 紧急抢营：集中火力打大本营驻军
+      for(const t of blist){ if(t.building && isEnemy(t.building.owner,u.owner)){ if(rushA && hexDist(t.c,t.r,CENTER_CR.c,CENTER_CR.r)>5) continue; const d=hexDist(u.c,u.r,t.c,t.r); const ct=center(t.c,t.r); const inR = melee ? Math.hypot(u.px-ct.x,u.py-ct.y)<=CFG.contactPx+12 : d<=gRange; if(inR && d<anyD){anyD=d;anyT=t.building;anyKind='building';anyTile=t;} } }
+      if(!atkT && anyT && (!holdMode || rushA)){ atkT=anyT; atkKind=anyKind; atkTile=anyTile; }   // holdMode 不主动拆敌建筑(紧急抢营例外:拆中路建筑打通到大本营)
       else if(!atkT && anyT && anyKind==='unit'){ atkT=anyT; atkKind=anyKind; atkTile=anyTile; }
       if(atkT && !goer){ if(u.atkCd<=0){
           if(spec.windup){ if(!u.winding){ u.winding=true; u.windCd=spec.windup; } u.windCd-=dt; if(u.windCd>0) continue; u.winding=false; }
@@ -349,7 +398,7 @@ const SIM = {
           else { dealDamage(S,u,atkT,atkKind,spec,atkTile); }
         } continue; }
       // 自由直线移动 + 建筑绕行（不吸附格心；越界/空区当作阻挡）
-      u.winding=false; const strive=S._strive&&S._strive[TEAM[u.owner]]&&!u.isHero; const vel=(DX/spec.mv)*CFG.moveSpeedMult*(strive?1.2:1), step=vel*dt;   // 奋进：移速+20%(巨龙除外)
+      u.winding=false; const strive=S._strive&&S._strive[TEAM[u.owner]]&&!u.isHero; const vel=(DX/spec.mv)*CFG.moveSpeedMult*(CFG.teamMoveMult[TEAM[u.owner]]||1)*(strive?1.2:1), step=vel*dt;   // 奋进：移速+20%(巨龙除外)
       let dirx=gx-u.px, diry=gy-u.py; const dl=Math.hypot(dirx,diry)||1; dirx/=dl; diry/=dl;
       for(const a of [0,0.5,-0.5,1.0,-1.0,1.6,-1.6]){ const ca=Math.cos(a),sa=Math.sin(a); const rx=dirx*ca-diry*sa, ry=dirx*sa+diry*ca;
         const nx=u.px+rx*step, ny=u.py+ry*step; const h=pixelToHex(nx,ny); if(!h) continue;
@@ -430,6 +479,7 @@ function teamHasCity(S,team){ for(const row of S.tiles) for(const t of row){ if(
 function cityExists(S,o){ for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.kind==='city'&&t.building.owner===o) return true; } return false; }
 function shieldActive(S){ return S.timeMs < CFG.baseShieldSec*1000; }   // 前 30s 护罩：任何人不得进入大本营
 function cmdTarget(S,u){
+  if(S._rush && S._rush[TEAM[u.owner]]) return baseMarchTarget(S,u);   // 紧急抢营：压过一切指令,全军直扑中路
   // 守家/救援兵（含被指派回防者、老家留守baseline）→ 执行防守巡逻，不受进攻指令影响
   if(S._guards && S._guards.has(u)) return defendStation(S,u);
   // 前线兵：听所属队伍的总指挥（蓝=玩家按钮 S.cmd；红=AI 决策 S.aiCmd）
@@ -440,22 +490,28 @@ function cmdTarget(S,u){
     if(S._rescuers && S._rescuers.has(u) && u._rescueTile){ const p=center(u._rescueTile.c,u._rescueTile.r); return {x:p.x,y:p.y}; }   // 救援：赶往被围攻队友的受威胁建筑
     return defendStation(S,u);
   }
-  const tgt = cmd==='left'?'B' : cmd==='right'?'D' : (cmd==='A'||cmd==='C'||cmd==='B'||cmd==='D')?cmd : null;   // 攻击某敌方玩家的城
+  const tgt = cmd==='left' ? (AXIS==='V'?'B':'D') : cmd==='right' ? (AXIS==='V'?'D':'B') : (cmd==='A'||cmd==='C'||cmd==='B'||cmd==='D')?cmd : null;   // 攻左/攻右＝屏幕方位(横轴局屏幕左=D、右=B)
   if(tgt && isEnemy(tgt,u.owner)){ if(cityExists(S,tgt)){ const p=center(...CITY_AT[tgt]); return {x:p.x,y:p.y}; }
     let best=null,bd=1e9; for(const row of S.tiles) for(const t of row){ if(t&&t.building&&isEnemy(t.building.owner,u.owner)){ const d=hexDist(u.c,u.r,t.c,t.r); if(d<bd){bd=d;best=t;} } }
     if(best){ const p=center(best.c,best.r); return {x:p.x,y:p.y}; } }
   return defendStation(S,u);
 }
-function frontBuildingOf(S,owner){   // 该玩家最靠前(离中心最近)的建筑——最可能挨打、最该守
-  let best=null,bd=1e9; for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.owner===owner&&t.building.kind!=='outpost'){ const d=hexDist(t.c,t.r,CENTER_CR.c,CENTER_CR.r); if(d<bd){bd=d;best=t;} } } return best;
+function pcache(S){   // 按建筑版本号缓存：各玩家前沿建筑与塔列表(只依赖建筑布局)
+  const rev=S._bRev||0; if(S._pc && S._pc.rev===rev) return S._pc;
+  const pc={rev, front:{}, towers:{A:[],B:[],C:[],D:[]}};
+  for(const row of S.tiles) for(const t of row){ if(!t||!t.building||t.building.kind==='outpost') continue; const o=t.building.owner;
+    if(t.building.kind==='tower') pc.towers[o].push(t);
+    const d=hexDist(t.c,t.r,CENTER_CR.c,CENTER_CR.r); if(!pc.front[o]||d<pc.front[o].d) pc.front[o]={t,d}; }
+  S._pc=pc; return pc;
 }
+function frontBuildingOf(S,owner){ const f=pcache(S).front[owner]; return f?f.t:null; }
 function towardCenter(c,r){ let best=null,bd=1e9; for(const n of neighbors(c,r)){ const d=hexDist(n.c,n.r,CENTER_CR.c,CENTER_CR.r); if(d<bd){bd=d;best=n;} } return best||{c,r}; }
 function defendStation(S,u){
   // 要守的建筑：被指派的那座；否则本方最靠前的建筑
   let b=(u._defendTile && u._defendTile.building && u._defendTile.building.owner===u.owner) ? u._defendTile : frontBuildingOf(S,u.owner);
   if(!b){ if(cityExists(S,u.owner)){ const c=CITY_AT[u.owner]; return jitterAround(S,u,c[0],c[1]); } return {x:u.px,y:u.py}; }
   // 若守的建筑附近有己方防御塔：站到「塔朝敌(中心)一侧1格」——敌来打你时正好落进塔射程；多塔就近
-  let tower=null,td=1e9; for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.kind==='tower'&&t.building.owner===u.owner){ const d=hexDist(t.c,t.r,b.c,b.r); if(d<td){td=d;tower=t;} } }
+  let tower=null,td=1e9; for(const t of pcache(S).towers[u.owner]){ const d=hexDist(t.c,t.r,b.c,b.r); if(d<td){td=d;tower=t;} }
   const anchor = (tower && td<=4) ? towardCenter(tower.c,tower.r) : towardCenter(b.c,b.r);   // 塔火力位 / 建筑前沿1格
   return jitterAround(S,u,anchor.c,anchor.r);
 }
@@ -503,8 +559,10 @@ function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2
   const power=(o)=>{ let s; if(o.kind==='tower')s=CFG.towers[o.cardId]; else if(o.kind==='city')s=CFG.city; else s=CFG.troops[o.cardId]; if(!s||!s.atk)return 0; const dps=s.atk/((s.ai||1000)/1000); return dps*(1+(s.hp||s.bhp||50)/150); };
   // 角色分配：守家兵(guards) vs 前线兵(听总指挥)。按“调够兵”原则——派去的兵分+己方塔分≈来敌进攻分即止
   const guards=new Set();
+  const rushT=S._rush||{blue:false,red:false};
   for(const u of S.units) u._defendTile=null;
   for(const p of PLAYERS){
+    if(rushT[TEAM[p]]) continue;                                               // 紧急抢营：全员解放去抢营,不留守家
     const myB=bOwn[p];
     if(!myB.length) continue;
     const attackers=new Set();
@@ -530,6 +588,7 @@ function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2
   const teamUnitPow={blue:0,red:0};
   for(const u of S.units){ if(u.hp>0) teamUnitPow[TEAM[u.owner]]+=power({cardId:u.cardId}); }
   for(const team of ['blue','red']){
+    if(rushT[team]) continue;                                                  // 紧急抢营压过救援
     const mates = team==='blue'?['A','C']:['B','D']; const oppTeam=team==='blue'?'red':'blue';
     for(let i=0;i<2;i++){
       const p=mates[i], q=mates[1-i]; const myB=bOwn[p]; if(!myB.length) continue;
@@ -549,7 +608,8 @@ function computeThreats(S){   // 每步预算：各队“正被敌军逼近(≤2
   for(const team of ['blue','red']){
     if(g && g.hp>0 && TEAM[g.owner]===team && g.c===CENTER_CR.c && g.r===CENTER_CR.r && !g.isHero){ runner[team]=g; continue; }   // 已有本队驻军→维持
     const cmd = team==='blue' ? (S.cmd||'defend') : (S.aiCmd||'base');
-    if(shieldActive(S) || cmd!=='base') continue;                               // 未在抢营/护罩期→不派
+    const rushHere = S._rush && S._rush[team];
+    if(shieldActive(S) || (cmd!=='base' && !rushHere)) continue;                // 未在抢营/护罩期→不派(紧急抢营例外)
     let mage=null,md=1e9, any=null,ad=1e9;
     for(const u of S.units){ if(u.hp<=0||TEAM[u.owner]!==team||u.isHero||guards.has(u)) continue; const d=hexDist(u.c,u.r,CENTER_CR.c,CENTER_CR.r);
       if(u.cardId==='mage'){ if(d<md){md=d;mage=u;} } if(d<ad){ad=d;any=u;} }
@@ -643,7 +703,7 @@ const CW=OX+(CFG.cols-1)*DX+DX/2+SIZE, CH=OY+(CFG.rows-1)*DY+SIZE;
 /* ---- 相机：默认缩放到上下高度匹配(左右可出屏)，支持双指缩放/拖拽平移 ---- */
 const CAM={s:1,x:0,y:0,min:0.2,max:4,vw:0,vh:0,dpr:1,inited:false};
 function clampCam(){
-  const mw=CW*CAM.s, mh=CH*CAM.s;
+  const mw=RW()*CAM.s, mh=RH()*CAM.s;
   if(mw<=CAM.vw) CAM.x=(CAM.vw-mw)/2; else CAM.x=Math.max(CAM.vw-mw, Math.min(0, CAM.x));
   if(mh<=CAM.vh) CAM.y=(CAM.vh-mh)/2; else CAM.y=Math.max(CAM.vh-mh, Math.min(0, CAM.y));
 }
@@ -655,10 +715,10 @@ function setupCanvas(){
   cv.style.width=w+'px'; cv.style.height=h+'px';
   cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
   CAM.vw=w; CAM.vh=h; CAM.dpr=dpr;
-  const fitH=h/CH, fitW=w/CW;
+  const fitH=h/RH(), fitW=w/RW();
   CAM.min=Math.min(fitH,fitW);          // 最小＝整图刚好放下
   CAM.max=fitH*3;                        // 最大＝高度匹配的3倍
-  if(!CAM.inited){ CAM.s=fitH; CAM.x=(w-CW*fitH)/2; CAM.y=(h-CH*fitH)/2; CAM.inited=true; }   // 默认：高度匹配、水平居中(左右出屏)
+  if(!CAM.inited){ CAM.s=fitH; CAM.x=(w-RW()*fitH)/2; CAM.y=(h-RH()*fitH)/2; CAM.inited=true; }   // 默认：高度匹配、水平居中(左右出屏)
   CAM.s=Math.max(CAM.min,Math.min(CAM.max,CAM.s));
   clampCam();
 }
@@ -668,7 +728,7 @@ const OWN={ A:{fill:'#2f7ed8',tint:'#dfeaf9',border:'#8fbdec'}, C:{fill:'#4a93de
             N:{fill:'#9a988e',tint:'#ececea',border:'#cdcbc2'} };
 const COL={ ok:'#1b2a3a', no:'#b3b1a8', white:'#ffffff', hpTrack:'#00000055', hp:'#7ac043', gold:'#e8b23a' };
 function hexPath(cx,cy){ ctx.beginPath(); for(let i=0;i<6;i++){ const a=Math.PI/180*(60*i-30), x=cx+SIZE*Math.cos(a), y=cy+SIZE*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.closePath(); }
-function icon(kind,cx,cy,sc,color){ ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc); ctx.fillStyle=color; ctx.strokeStyle=color;
+function icon(kind,cx,cy,sc,color){ ctx.save(); ctx.translate(cx,cy); ctx.scale(sc,sc); ctx.fillStyle=color; ctx.strokeStyle=color;   // 直立由外层bill组保证
   if(kind==='mine'){ ctx.beginPath(); ctx.moveTo(-5.5,-1.5);ctx.lineTo(-2.8,-6);ctx.lineTo(2.8,-6);ctx.lineTo(5.5,-1.5);ctx.lineTo(0,7);ctx.closePath(); ctx.fill(); }
   else if(kind==='tower'){ ctx.beginPath();ctx.moveTo(-4,7);ctx.lineTo(-3.4,-2.5);ctx.lineTo(3.4,-2.5);ctx.lineTo(4,7);ctx.closePath();ctx.fill(); [-4.2,-1.2,1.8].forEach(x=>ctx.fillRect(x,-5,2.4,2.8)); }
   else if(kind==='city'){ ctx.fillRect(-6.5,-2,13,9); [-6.5,-1.2,4.1].forEach(x=>ctx.fillRect(x,-4.5,2.4,2.5)); }
@@ -683,31 +743,37 @@ function icon(kind,cx,cy,sc,color){ ctx.save(); ctx.translate(cx,cy); ctx.scale(
 const CARD={ city:['city','主城'], mine:['mine','宝矿'], tower_arrow:['tower','箭塔'], tower_bolt:['tower','弩塔'],
   militia:['militia','民兵'], archer:['archer','弓兵'], cavalry:['cavalry','骑兵'], mage:['mage','法师'], dragon:['dragon','巨龙'], outpost:['outpost','前哨'] };
 function iconKey(b){ if(b.kind==='city')return CARD.city; if(b.kind==='mine')return CARD.mine; if(b.kind==='outpost')return CARD.outpost; if(b.kind==='tower')return CARD[b.cardId]; if(b.kind==='barracks')return CARD[b.cardId]; return ['militia','?']; }
-function hpbar(cx,cy,w,frac){ ctx.fillStyle=COL.hpTrack; ctx.fillRect(cx-w/2,cy,w,2.8); ctx.fillStyle=COL.hp; ctx.fillRect(cx-w/2,cy,w*frac,2.8); }
+function hpbar(cx,cy,w,frac){ ctx.fillStyle=COL.hpTrack; ctx.fillRect(cx-w/2,cy,w,2); ctx.fillStyle=COL.hp; ctx.fillRect(cx-w/2,cy,w*frac,2); }
+function bill(x,y,fn,sc){ if(AXIS!=='H'){ fn(x,y); return; } ctx.save(); ctx.translate(x,y); ctx.rotate(Math.PI/2);
+  const k=(sc===undefined?0.87:sc); if(k!==1) ctx.scale(k,k);   // 横轴局列距22.5px比竖轴26px窄13%，格内内容等比缩小还原密度
+  fn(0,0); ctx.restore(); }
 let hover=null;
 function render(S){
   ctx.setTransform(CAM.dpr,0,0,CAM.dpr,0,0); ctx.clearRect(0,0,CAM.vw,CAM.vh);           // 屏幕空间清屏
   ctx.setTransform(CAM.dpr*CAM.s,0,0,CAM.dpr*CAM.s, CAM.dpr*CAM.x, CAM.dpr*CAM.y);      // 相机变换：世界坐标照旧
+  if(PHASE.mode!=='play' && PHASE.spinA){ const cx0=RW()/2, cy0=RH()/2; ctx.translate(cx0,cy0); ctx.rotate(PHASE.spinA); ctx.translate(-cx0,-cy0); }   // 抽图旋转动画
+  if(AXIS==='H') ctx.transform(0,-1,1,0,0,CW);                                          // 横轴局：整图旋转90°，我方仍显示在下
   // 迷雾揭示：己队(A/C)建筑+邻格常亮
   const rev=new Set(); if(CFG.fog){ for(const row of S.tiles) for(const t of row){ if(t&&t.building&&TEAM[t.building.owner]==='blue'){ rev.add(t.r*CFG.cols+t.c); for(const n of neighbors(t.c,t.r)) rev.add(n.r*CFG.cols+n.c); } } }
   for(let r=0;r<CFG.rows;r++) for(let c=0;c<CFG.cols;c++){ const t=S.tiles[r][c]; if(!t) continue; const {x,y}=center(c,r);
     const cd=t.lockUntil>S.timeMs;
-    if(cd && !t.building){ hexPath(x,y); ctx.fillStyle='#f1efe8'; ctx.fill(); ctx.setLineDash([3,2]); ctx.strokeStyle='#c9c7bd'; ctx.lineWidth=1; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=COL.no; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(Math.ceil((t.lockUntil-S.timeMs)/1000)+'s',x,y+3.5); continue; }
+    if(cd && !t.building){ hexPath(x,y); ctx.fillStyle='#f1efe8'; ctx.fill(); ctx.setLineDash([3,2]); ctx.strokeStyle='#c9c7bd'; ctx.lineWidth=1; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=COL.no; ctx.font='10px sans-serif'; ctx.textAlign='center'; bill(x,y,(bx,by)=>ctx.fillText(Math.ceil((t.lockUntil-S.timeMs)/1000)+'s',bx,by+3.5)); continue; }
     if(t.building){ const b=t.building; const oc=OWN[b.owner]; hexPath(x,y); ctx.fillStyle=oc.fill; ctx.fill();
       if(S._strive && S._strive[TEAM[b.owner]]){ const pulse=0.06+0.12*Math.abs(Math.sin(S.timeMs/180)); ctx.fillStyle='rgba(255,180,60,'+pulse.toFixed(2)+')'; ctx.fill(); }
       ctx.lineWidth=1; ctx.strokeStyle=oc.fill; ctx.stroke();
       { let frac=null;
         if(b.kind==='barracks' && b.spawnTotal) frac=1-b.spawnCd/b.spawnTotal;
         else if((b.kind==='mine'||b.kind==='city') && b.gemAcc!==undefined) frac=b.gemAcc/CFG.gemLump;
-        if(frac!=null){ frac=Math.max(0,Math.min(1,frac)); if(frac>0){ ctx.save(); hexPath(x,y); ctx.clip(); ctx.fillStyle='rgba(255,255,255,0.42)'; const hh=2*SIZE*frac; ctx.fillRect(x-SIZE,y+SIZE-hh,2*SIZE,hh); ctx.restore(); } } }
-      const [ik,label]=iconKey(b); icon(ik,x,y-4,1.05,COL.white); ctx.fillStyle=COL.white; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.fillText(label,x,y+12);
-      if(b.hp<b.maxHp) hpbar(x,y-18,20,Math.max(0,b.hp/b.maxHp));
+        if(frac!=null){ frac=Math.max(0,Math.min(1,frac)); if(frac>0){ ctx.save(); hexPath(x,y); ctx.clip(); ctx.fillStyle='rgba(255,255,255,0.42)'; const hh=2*SIZE*frac;
+        if(AXIS==='H'){ ctx.translate(x,y); ctx.rotate(Math.PI/2); ctx.fillRect(-SIZE,SIZE-hh,2*SIZE,hh); } else ctx.fillRect(x-SIZE,y+SIZE-hh,2*SIZE,hh); ctx.restore(); } } }   // 进度永远从屏幕底部向上填
+      const [ik,label]=iconKey(b); bill(x,y,(bx,by)=>{ icon(ik,bx,by-4,1.05,COL.white); ctx.fillStyle=COL.white; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.fillText(label,bx,by+12);
+        if(b.hp<b.maxHp) hpbar(bx,by-18,20,Math.max(0,b.hp/b.maxHp)); });   // 图标在上/文字在下/血条头顶,整组直立
     } else { const oc=OWN[t.owner]; hexPath(x,y); ctx.fillStyle=oc.tint; ctx.fill();
       if(S._strive && S._strive[TEAM[t.owner]]){ const pulse=0.05+0.10*Math.abs(Math.sin(S.timeMs/180)); ctx.fillStyle='rgba(240,150,40,'+pulse.toFixed(2)+')'; ctx.fill(); }   // 奋进方领地闪烁
       ctx.lineWidth=1; ctx.strokeStyle=oc.border; ctx.stroke();
       const inRing=RING_SET.has(r*CFG.cols+c);
       if(t.isBase){ const hc=S.base&&S.base.hold; const gcol=hc==='blue'?'#2f7ed8':hc==='red'?'#d64545':hc==='contest'?'#c8860f':COL.gold;
-        hexPath(x,y); ctx.save(); ctx.fillStyle=hc==='blue'?'rgba(47,126,216,0.20)':hc==='red'?'rgba(214,69,69,0.20)':'rgba(232,178,58,0.16)'; ctx.fill(); ctx.restore(); ctx.lineWidth=2.8; ctx.strokeStyle=gcol; ctx.stroke(); ctx.fillStyle=gcol; ctx.font='14px sans-serif'; ctx.textAlign='center'; ctx.fillText('★',x,y+5); continue; }
+        hexPath(x,y); ctx.save(); ctx.fillStyle=hc==='blue'?'rgba(47,126,216,0.20)':hc==='red'?'rgba(214,69,69,0.20)':'rgba(232,178,58,0.16)'; ctx.fill(); ctx.restore(); ctx.lineWidth=2.8; ctx.strokeStyle=gcol; ctx.stroke(); ctx.fillStyle=gcol; ctx.font='14px sans-serif'; ctx.textAlign='center'; bill(x,y,(bx,by)=>ctx.fillText('★',bx,by+5)); continue; }
       if(inRing){ hexPath(x,y); ctx.save(); ctx.setLineDash([2,2]); ctx.lineWidth=1.3; ctx.strokeStyle=COL.gold; ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
       const revealed = !CFG.fog || rev.has(r*CFG.cols+c) || (S.timeMs-(t.seen||-1e9) < CFG.fogRevealMs);
       if(!revealed){ hexPath(x,y); ctx.fillStyle='rgba(120,118,110,0.30)'; ctx.fill(); continue; }
@@ -717,8 +783,10 @@ function render(S){
       const affordable=mine && S.gems.A>=finalCost;
       const col=mine?(affordable?COL.ok:COL.no):COL.no;
       const ik=t.type==='barracks'?'militia' : t.type==='tower'?'tower' : t.type==='mine'?'mine' : 'q';
-      if(ik==='q'){ ctx.fillStyle=col; ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText('?',x,y-1);} else icon(ik,x,y-4,0.85,col);
-      ctx.fillStyle=col; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(base,x,y+12);
+      bill(x,y,(bx,by)=>{
+        if(ik==='q'){ ctx.fillStyle=col; ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText('?',bx,by-1); } else icon(ik,bx,by-4,0.85,col);
+        ctx.fillStyle=col; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(base,bx,by+12);
+      });   // 图标/问号在上、价格在下整组直立
     }
   }
   // 子弹
@@ -731,33 +799,33 @@ function render(S){
   for(const u of S.units){ const x=u.px,y=u.py; const col=OWN[u.owner].fill;
     if(S._strive && S._strive[TEAM[u.owner]] && !u.isHero){   // 奋进闪烁光环
       const pulse=0.35+0.4*Math.abs(Math.sin(S.timeMs/180));
-      ctx.beginPath(); ctx.arc(x,y,12.5,0,7); ctx.lineWidth=2.4; ctx.strokeStyle='rgba(240,150,40,'+pulse.toFixed(2)+')'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y,14.2,0,7); ctx.lineWidth=2.6; ctx.strokeStyle='rgba(240,150,40,'+pulse.toFixed(2)+')'; ctx.stroke();
     }
-    ctx.beginPath(); ctx.arc(x,y,u.isHero?14:8.5,0,7); ctx.fillStyle=COL.white; ctx.fill(); ctx.lineWidth=u.isHero?2:1.4; ctx.strokeStyle=col; ctx.stroke(); icon(u.cardId,x,y,u.isHero?1.5:0.82,col); if(u.hp<u.maxHp) hpbar(x,y-(u.isHero?20:14),u.isHero?22:16,Math.max(0,u.hp/u.maxHp));
-    if(u.winding){ const wsp=CFG.troops[u.cardId]; const pr=wsp.windup?1-Math.max(0,u.windCd)/wsp.windup:0; ctx.save(); ctx.lineWidth=2.6; ctx.strokeStyle='#8f7bff'; ctx.beginPath(); ctx.arc(x,y,12.5,-Math.PI/2,-Math.PI/2+2*Math.PI*Math.max(0,Math.min(1,pr))); ctx.stroke(); ctx.restore(); } }
+    ctx.beginPath(); ctx.arc(x,y,u.isHero?15.8:9.6,0,7); ctx.fillStyle=COL.white; ctx.fill(); ctx.lineWidth=u.isHero?2.2:1.6; ctx.strokeStyle=col; ctx.stroke();
+    bill(x,y,(bx,by)=>{ icon(u.cardId,bx,by,u.isHero?1.7:0.93,col); if(u.hp<u.maxHp) hpbar(bx,by-(u.isHero?22:15),u.isHero?24:18,Math.max(0,u.hp/u.maxHp)); },1);   // 兵视觉=原始的1.125倍(0.75再放大50%)
+    if(u.winding){ const wsp=CFG.troops[u.cardId]; const pr=wsp.windup?1-Math.max(0,u.windCd)/wsp.windup:0; ctx.save(); ctx.lineWidth=2; ctx.strokeStyle='#8f7bff'; const a0=(AXIS==='H'?0:-Math.PI/2); ctx.beginPath(); ctx.arc(x,y,14.2,a0,a0+2*Math.PI*Math.max(0,Math.min(1,pr))); ctx.stroke(); ctx.restore(); } }   // 起始角换算,保证从屏幕正上方开始
   // 悬停 +x（仅自己可翻的格）
-  if(hover){ const ht=S.tiles[hover.r] && S.tiles[hover.r][hover.c]; if(ht && SIM.canFlip(S,'A',hover.c,hover.r)){ const {base,final}=SIM.cost(S,'A',hover.c,hover.r); const extra=final-base; if(extra>0){ const {x,y}=center(hover.c,hover.r); ctx.fillStyle='#fff'; ctx.strokeStyle='#b9b7ad'; ctx.lineWidth=1; const w=30,h=15,bx=x-w/2,by=y-SIZE-16; ctx.beginPath(); ctx.roundRect?ctx.roundRect(bx,by,w,h,4):ctx.rect(bx,by,w,h); ctx.fill(); ctx.stroke(); ctx.fillStyle='#c23b3b'; ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.fillText('+'+extra,x,by+11); } } }
+  if(hover){ const ht=S.tiles[hover.r] && S.tiles[hover.r][hover.c]; if(ht && SIM.canFlip(S,'A',hover.c,hover.r)){ const {base,final}=SIM.cost(S,'A',hover.c,hover.r); const extra=final-base; if(extra>0){ const wp=rotPt(center(hover.c,hover.r)); const x=wp.x,y=wp.y; ctx.save(); ctx.setTransform(CAM.dpr*CAM.s,0,0,CAM.dpr*CAM.s, CAM.dpr*CAM.x, CAM.dpr*CAM.y); ctx.fillStyle='#fff'; ctx.strokeStyle='#b9b7ad'; ctx.lineWidth=1; const w=30,h=15,bx=x-w/2,by=y-SIZE-16; ctx.beginPath(); ctx.roundRect?ctx.roundRect(bx,by,w,h,4):ctx.rect(bx,by,w,h); ctx.fill(); ctx.stroke(); ctx.fillStyle='#c23b3b'; ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.fillText('+'+extra,x,by+11); ctx.restore(); } } }
+  // 顶层(相机空间，不随地图旋转)：宝石标签 / 大本营圈与横幅 / 抽图倒计时
+  ctx.setTransform(CAM.dpr*CAM.s,0,0,CAM.dpr*CAM.s, CAM.dpr*CAM.x, CAM.dpr*CAM.y);
   drawGemLabels(S);
   drawBanner(S);
+  drawPhaseOverlay();
 }
 function drawGemLabels(S){
-  // 各自地盘边上的宝石数：我方(下臂)左下 / 友方(上臂)左上 / 左敌(左臂)左下 / 右敌(右臂)右下
-  const L=[ {p:'A', name:'我方', at:center(5,24)},     // 下臂左侧空区(左下)
-            {p:'C', name:'队友', at:center(5,2)},      // 上臂左侧空区(左上)
-            {p:'B', name:'敌方', at:center(4,19)},     // 左臂下方空区(左下)
-            {p:'D', name:'敌方', at:center(23,19)} ];  // 右臂下方空区(右下)
+  // 各自地盘边上的宝石数(屏幕方位固定：我方左下/队友左上/两敌各在其臂旁)，锚点随轴向切换、绘制在相机空间保持直立
   ctx.save(); ctx.font='bold 13px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  for(const e of L){ const col=OWN[e.p].fill; const fire=(S._strive && S._strive[TEAM[e.p]])?' 🔥':''; ctx.fillStyle=col; ctx.fillText(e.name+' ◆'+Math.floor(S.gems[e.p])+fire, e.at.x, e.at.y); }
+  for(const e of GEM_LB){ const at=rotPt(center(e.cell[0],e.cell[1])); const col=OWN[e.p].fill; const fire=(S._strive && S._strive[TEAM[e.p]])?' 🔥':''; ctx.fillStyle=col; ctx.fillText(e.name+' ◆'+Math.floor(S.gems[e.p])+fire, at.x, at.y); }
   ctx.restore();
 }
 function bannerText(text,color,y,alpha,big){ ctx.save(); ctx.globalAlpha=Math.max(0,Math.min(1,alpha)); ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='bold '+(big?24:19)+'px system-ui,sans-serif'; const h=big?46:38; const w=ctx.measureText(text).width+(big?54:38); const bx=CW/2-w/2, by=y-h/2;
   ctx.fillStyle=big?'rgba(58,40,8,0.85)':'rgba(15,20,30,0.62)'; if(ctx.roundRect){ctx.beginPath();ctx.roundRect(bx,by,w,h,big?15:12);ctx.fill();}else ctx.fillRect(bx,by,w,h);
   if(big){ ctx.lineWidth=2.5; ctx.strokeStyle='#ffcf5a'; if(ctx.roundRect){ctx.beginPath();ctx.roundRect(bx,by,w,h,15);ctx.stroke();} }
-  ctx.fillStyle=color; ctx.fillText(text,CW/2,y); ctx.textBaseline='alphabetic'; ctx.restore();
+  ctx.fillStyle=color; ctx.fillText(text,RW()/2,y); ctx.textBaseline='alphabetic'; ctx.restore();
 }
 function drawBanner(S){ const now=S.timeMs;
-  if(shieldActive(S)){ const p=BASE_PX, rad=SIZE*2.7, rem=Math.ceil(CFG.baseShieldSec - now/1000);
+  if(shieldActive(S)){ const p=rotPt(BASE_PX), rad=SIZE*2.7, rem=Math.ceil(CFG.baseShieldSec - now/1000);
     ctx.save();
     const g=ctx.createRadialGradient(p.x,p.y,rad*0.25,p.x,p.y,rad); g.addColorStop(0,'rgba(120,180,255,0.04)'); g.addColorStop(0.75,'rgba(90,150,240,0.16)'); g.addColorStop(1,'rgba(70,130,230,0.32)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.fill();
@@ -765,7 +833,7 @@ function drawBanner(S){ const now=S.timeMs;
     ctx.fillStyle='#2c5fb0'; ctx.font='bold 12px system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🛡 '+rem+'s',p.x,p.y); ctx.textBaseline='alphabetic';
     ctx.restore();
   } else if(S.base.blue>0 || S.base.red>0){   // 占领进度圈：下半蓝(蓝方进度) / 上半红(红方进度)；旁附各自"还差几秒占满"倒计时
-    const p=BASE_PX, R=SIZE*1.55; const bp=Math.max(0,Math.min(1,S.base.blue/100)), rp=Math.max(0,Math.min(1,S.base.red/100));
+    const p=rotPt(BASE_PX), R=SIZE*1.55; const bp=Math.max(0,Math.min(1,S.base.blue/100)), rp=Math.max(0,Math.min(1,S.base.red/100));
     ctx.save(); ctx.lineWidth=4.5; ctx.lineCap='butt';
     ctx.strokeStyle='rgba(0,0,0,0.13)'; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.stroke();   // 底环
     if(bp>0){ ctx.strokeStyle='#2f7ed8'; ctx.beginPath(); ctx.arc(p.x,p.y,R, Math.PI/2 - bp*Math.PI/2, Math.PI/2 + bp*Math.PI/2); ctx.stroke(); }   // 下半：从正下方向两侧
@@ -775,17 +843,23 @@ function drawBanner(S){ const now=S.timeMs;
     if(bp>0){ const s=Math.ceil((1-bp)*CFG.baseFillSec)+'s'; ctx.strokeText(s,p.x,p.y+R+10); ctx.fillStyle='#2f7ed8'; ctx.fillText(s,p.x,p.y+R+10); }   // 蓝方(圈下方,描边)
     ctx.textBaseline='alphabetic'; ctx.restore();
   }
+  if(S.rushFx && now<S.rushFx.until){ const rem=S.rushFx.until-now; const mine=S.rushFx.side==='blue';
+    bannerText(mine?'⚠ 大本营告急 · 全军突击！':'🔥 敌军孤注一掷 · 全力反扑大本营！', mine?'#e05555':'#f0a838', RH()*0.50, Math.min(1,rem/400), false); }
   if(S.striveFx && now<S.striveFx.until){ const rem=S.striveFx.until-now; const mine=S.striveFx.side==='blue';
-    bannerText(mine?'🔥 我方奋进模式开启 · 产宝石加速！':'🔥 敌方奋进模式开启！', mine?'#3f93ea':'#e05555', CH*0.42, Math.min(1,rem/400), false); }
+    bannerText(mine?'🔥 我方奋进模式开启 · 产宝石加速！':'🔥 敌方奋进模式开启！', mine?'#3f93ea':'#e05555', RH()*0.42, Math.min(1,rem/400), false); }
   if(S.flipFx && now<S.flipFx.until){ const rem=S.flipFx.until-now; const mine=TEAM[S.flipFx.side]==='blue';
-    bannerText(mine?'🐉 我方抽到巨龙！':'🐉 敌方抽到巨龙！', mine?'#3f93ea':'#e05555', CH*0.24, Math.min(1,rem/500), true); }
-  if(S.heroFx && now<S.heroFx.until){ const rem=S.heroFx.until-now; const mine=TEAM[S.heroFx.side]==='blue'; bannerText(mine?'⚡ 巨龙出击 ⚡':'⚠ 敌方巨龙来袭 ⚠', mine?'#3f93ea':'#e05555', CH*0.33, Math.min(1,rem/400), false); }
+    bannerText(mine?'🐉 我方抽到巨龙！':'🐉 敌方抽到巨龙！', mine?'#3f93ea':'#e05555', RH()*0.24, Math.min(1,rem/500), true); }
+  if(S.heroFx && now<S.heroFx.until){ const rem=S.heroFx.until-now; const mine=TEAM[S.heroFx.side]==='blue'; bannerText(mine?'⚡ 巨龙出击 ⚡':'⚠ 敌方巨龙来袭 ⚠', mine?'#3f93ea':'#e05555', RH()*0.33, Math.min(1,rem/400), false); }
 }
 
 /* ---------------- INPUT ---------------- */
-function canvasPos(ev){ const rect=cv.getBoundingClientRect(); return { cx:((ev.clientX-rect.left)-CAM.x)/CAM.s, cy:((ev.clientY-rect.top)-CAM.y)/CAM.s }; }   // 屏幕→世界(相机逆变换)
+function canvasPos(ev){ const rect=cv.getBoundingClientRect(); const rx=((ev.clientX-rect.left)-CAM.x)/CAM.s, ry=((ev.clientY-rect.top)-CAM.y)/CAM.s;
+  return AXIS==='H' ? {cx:CW-ry, cy:rx} : {cx:rx, cy:ry}; }   // 屏幕→世界(相机+旋转逆变换)
 let suppressClick=false, mDrag=null;
-cv.addEventListener('click',ev=>{ if(suppressClick){ suppressClick=false; return; } if(!G||G.over) return; const {cx,cy}=canvasPos(ev); const h=pixelToHex(cx,cy); if(h) SIM.flip(G,'A',h.c,h.r); });
+cv.addEventListener('click',ev=>{ if(suppressClick){ suppressClick=false; return; } if(!G||G.over) return;
+  if(PHASE.mode==='spin'){ PHASE.mode='count'; PHASE.t=0; PHASE.spinA=0; return; }   // 点击跳过旋转
+  if(PHASE.mode!=='play') return;
+  const {cx,cy}=canvasPos(ev); const h=pixelToHex(cx,cy); if(h) SIM.flip(G,'A',h.c,h.r); });
 cv.addEventListener('mousedown',ev=>{ mDrag={x:ev.clientX,y:ev.clientY,moved:0}; });
 cv.addEventListener('mousemove',ev=>{ if(mDrag){ const dx=ev.clientX-mDrag.x, dy=ev.clientY-mDrag.y; mDrag.x=ev.clientX; mDrag.y=ev.clientY; mDrag.moved+=Math.abs(dx)+Math.abs(dy); if(mDrag.moved>8){ CAM.x+=dx; CAM.y+=dy; clampCam(); suppressClick=true; } } if(!G) return; const {cx,cy}=canvasPos(ev); hover=pixelToHex(cx,cy); });
 window.addEventListener('mouseup',()=>{ mDrag=null; });
@@ -806,9 +880,13 @@ cv.addEventListener('touchmove',ev=>{ ev.preventDefault(); if(!tState) return;
     const wx=(mx-CAM.x)/CAM.s, wy=(my-CAM.y)/CAM.s; CAM.s=s2; CAM.x=mx-wx*s2; CAM.y=my-wy*s2; clampCam(); }
 },{passive:false});
 cv.addEventListener('touchend',ev=>{ ev.preventDefault();
-  if(tState && tState.mode==='pan' && tState.moved<8 && ev.touches.length===0 && G && !G.over){   // 轻点＝翻地建造
-    const rect=cv.getBoundingClientRect(); const wx=((tState.sx-rect.left)-CAM.x)/CAM.s, wy=((tState.sy-rect.top)-CAM.y)/CAM.s;
-    const h=pixelToHex(wx,wy); if(h) SIM.flip(G,'A',h.c,h.r);
+  if(tState && tState.mode==='pan' && tState.moved<8 && ev.touches.length===0 && G && !G.over){   // 轻点＝翻地建造(抽图期=跳过)
+    if(PHASE.mode==='spin'){ PHASE.mode='count'; PHASE.t=0; PHASE.spinA=0; }
+    else if(PHASE.mode==='play'){
+      const rect=cv.getBoundingClientRect(); const rx0=((tState.sx-rect.left)-CAM.x)/CAM.s, ry0=((tState.sy-rect.top)-CAM.y)/CAM.s;
+      const wx=AXIS==='H'?CW-ry0:rx0, wy=AXIS==='H'?rx0:ry0;
+      const h=pixelToHex(wx,wy); if(h) SIM.flip(G,'A',h.c,h.r);
+    }
   }
   if(ev.touches.length===0) tState=null;
 },{passive:false});
@@ -830,6 +908,7 @@ document.getElementById('exportBtn').onclick=()=>{ const blob=new Blob([JSON.str
 /* ---------------- LOOP + 生命周期 ---------------- */
 let G=null, lastEvtLen=0, acc=0, lastT=0, abToggle=false, paused=false;
 function newMatch(){ const seed=(Math.random()*1e9)>>>0; abToggle=!abToggle; G=SIM.init(seed, abToggle?'guard':'raw'); lastEvtLen=0; acc=0; lastT=performance.now(); document.getElementById('resultModal').style.display='none'; buildDeck();
+  CAM.inited=false; setupCanvas(); startPhase();   // 抽图定边：按新轴向重置相机并播放旋转动画
   document.querySelectorAll('#cmdBar .cmd').forEach(x=>x.classList.toggle('on', x.getAttribute('data-cmd')==='defend')); }
 function buildProb(){ const g=document.getElementById('probGrid');
   const NM={militia:'民兵',archer:'弓兵',cavalry:'骑兵',mage:'法师',dragon:'巨龙',tower_arrow:'箭塔',tower_bolt:'弩塔',outpost:'前哨',mine:'宝矿',tower:'塔',barracks:'兵营',question:'问号'};
@@ -856,7 +935,8 @@ function buildDeck(){ const g=document.getElementById('deckGrid'); const m=CFG.s
   g.innerHTML=rows.join('');
 }
 function loop(now){ const dt=Math.min(100, now-lastT); lastT=now;
-  if(!paused){ acc+=dt; const STEP=33; while(acc>=STEP){ SIM.step(G,STEP); acc-=STEP; } }
+  if(PHASE.mode!=='play'){ tickPhase(dt); acc=0; }
+  else if(!paused){ acc+=dt; const STEP=33; while(acc>=STEP){ SIM.step(G,STEP); acc-=STEP; } }
   if(G.events.length>lastEvtLen){ TEL.sink(G.events.slice(lastEvtLen)); lastEvtLen=G.events.length; }
   render(G); updateHUD(G);
   if(G.over && document.getElementById('resultModal').style.display==='none'){ showResult(G); }
@@ -880,6 +960,24 @@ function showResult(S){ const win=S.winner==='blue'; document.getElementById('re
   document.getElementById('resultSub').textContent=(S.winCond==='base'?'占领中央大本营':S.winCond==='city'?'摧毁敌队主城':'计时结束 · 占领条/占格多者胜'); document.getElementById('resultModal').style.display='flex'; }
 document.getElementById('replayBtn').onclick=()=>{ TEL.all.push({event:'replay_click', ts:Date.now()}); newMatch(); };
 
+/* 抽图阶段：spin(3s旋转,点击跳过) → count(2s显示3/2/1) → play */
+const PHASE={mode:'play', t:0, spinA:0};
+function startPhase(){ PHASE.mode='spin'; PHASE.t=0; PHASE.spinA=Math.PI*6; }
+function tickPhase(dt){
+  if(PHASE.mode==='spin'){ PHASE.t+=dt; const k=Math.min(1,PHASE.t/3000); const e=1-Math.pow(1-k,3);
+    PHASE.spinA=(1-e)*Math.PI*6; if(k>=1){ PHASE.mode='count'; PHASE.t=0; PHASE.spinA=0; } }
+  else if(PHASE.mode==='count'){ PHASE.t+=dt; if(PHASE.t>=2000){ PHASE.mode='play'; } }
+}
+function drawPhaseOverlay(){ if(PHASE.mode==='play') return; const cx=RW()/2, cy=RH()/2;
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  if(PHASE.mode==='spin'){ ctx.font='bold 17px system-ui,sans-serif'; ctx.lineWidth=4; ctx.strokeStyle='rgba(255,255,255,0.9)';
+    ctx.strokeText('🎲 抽取本局方位…（点击跳过）',cx,RH()*0.10); ctx.fillStyle='#26261f'; ctx.fillText('🎲 抽取本局方位…（点击跳过）',cx,RH()*0.10); }
+  else { const n=Math.max(1,Math.ceil((2000-PHASE.t)/667));
+    ctx.font='bold 72px system-ui,sans-serif'; ctx.lineWidth=7; ctx.strokeStyle='rgba(255,255,255,0.92)'; ctx.strokeText(n,cx,cy); ctx.fillStyle='#26261f'; ctx.fillText(n,cx,cy);
+    ctx.font='bold 15px system-ui,sans-serif'; ctx.lineWidth=4; const lbl='方位已定 · 你在下方，向上进攻 ↑';
+    ctx.strokeText(lbl,cx,cy+58); ctx.fillStyle='#26261f'; ctx.fillText(lbl,cx,cy+58); }
+  ctx.textBaseline='alphabetic'; ctx.restore();
+}
 /* AI 挂进循环 */
 (function(){ const origStep=SIM.step.bind(SIM); SIM.step=(S,dt)=>{ AI.tick(S,dt); origStep(S,dt); }; })();
 
