@@ -127,9 +127,9 @@
           <div>
             <b style="color:#26261f;">注意要点</b><br>
             · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>：整个圈子不可穿越，兵会绕道走，先发育。<br>
-            · 主城每次产出 <b>8 宝石</b>；<b>敌方建筑不可穿越</b>——挡路必须先拆掉。<br>
+            · 主城每次产出 <b>8 宝石</b>；<b>敌方建筑不可穿越</b>——挡路必须先拆掉；<b>拆掉敌方建筑该格立刻归你</b>（重建冷却期按新归属浅色显示）。<br>
             · 每队兵上限 <b>50</b>（巨龙不占额）；接近上限时出兵额度自动向<b>兵少的队友</b>倾斜，尽量均分；满编后兵营照常生产、新兵进入<b>屯兵队列</b>，一有兵阵亡立刻按先进先出补上（原兵营被拆则该批屯兵作废）。<br>
-            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +50%</b>、<b>防御塔射速 +30%</b>直到追回差距（人口/领地/占营时间<b>任一项追平即刻暂停</b>）；<b>队友主城被摧毁</b>的一方最高优先开启；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
+            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +50%</b>、<b>防御塔射速 +30%</b>直到追回差距（达标<b>即刻开启</b>；人口/领地/占营三项中<b>≥2 项不落后即刻退出</b>，每秒判定2次）；<b>队友主城被摧毁</b>的一方最高优先开启（但三项全不落后时同样退出，劣势再现自动重开）；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
             · 敌方占领<b>倒计时低于 20 秒</b>时，全队自动进入<b>紧急抢营</b>：全军压向中路、只清剿挡路敌兵不追远敌（射程内照常还手）、拆除中路敌方建筑、集中火力打大本营驻军（敌我同规则）。<br>
             · 大本营<b>只能进 1 个兵</b>驻守：切「抢营」后会自动派 1 个兵进驻（优先法师），其余部队在外圈护卫；驻军<b>受伤减半、远程射程+1</b>；<b>巨龙不能进</b>大本营。<br>
             · 外部攻打大本营的兵只能<b>贴着六角形边缘</b>打，打死驻军后己方才能进驻。<br>
@@ -162,7 +162,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.15 · 更新 2026-07-20 09:21';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.16 · 更新 2026-07-20 10:20';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -354,15 +354,22 @@ const SIM = {
                  : (teamU.blue<teamU.red?'blue' : teamU.red<teamU.blue?'red' : (S._striveSt.blue.on?'blue' : S._striveSt.red.on?'red' : 'blue'));
     if(meets.blue && meets.red){ if(weaker==='blue') meets.red=false; else meets.blue=false; }
     const tc0=S._tileCnt||{blue:0,red:0};
+    // 动态逆转判定：每秒刷新2次，统计「人口/领地/占营」三项中不落后(追平即算)的项数
+    S._revCd=(S._revCd===undefined?0:S._revCd)-dt;
+    if(S._revCd<=0){ S._revCd=500;
+      const mm=(a,b)=>(a+b>0)?(a>=b?1:0):-1;                                   // -1=该项双方皆0,无对比意义(如开局占营0:0),不参与判定
+      const pk=(t,o)=>{ const arr=[mm(teamU[t],teamU[o]),mm(tc0[t],tc0[o]),mm(capSec[t],capSec[o])].filter(v=>v>=0); return {ok:arr.reduce((x,y)=>x+y,0), tot:arr.length}; };
+      S._parity={ blue:pk('blue','red'), red:pk('red','blue') }; }
+    const par=S._parity||{blue:{ok:0,tot:0},red:{ok:0,tot:0}};
     for(const team of ['blue','red']){
-      const st=S._striveSt[team]; const opp=team==='blue'?'red':'blue';
-      if(!st.on){ if(meets[team]){ st.meet+=dt; if(st.meet>=2000){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.striveStat[team].n++;
-        st.watch={ units:teamU[team]<teamU[opp], tiles:tc0[team]<tc0[opp], cap:capSec[team]<capSec[opp] };   // 记录开启时的落后项
-      } } else st.meet=0; }
+      const st=S._striveSt[team];
+      st.cool=Math.max(0,(st.cool||0)-dt);
+      const p=par[team];
+      const rev = elim[team] ? (p.tot>0 && p.ok>=p.tot) : (p.ok>=2);           // 退出线：≥2个有意义项不落后即退(灭家方需全部有意义项不落后)
+      if(!st.on){ if(meets[team] && st.cool<=0){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.striveStat[team].n++; } }   // 达标即开启
       else {
-        const rev = st.watch && ((st.watch.units&&teamU[team]>=teamU[opp]) || (st.watch.tiles&&tc0[team]>=tc0[opp]) || (st.watch.cap&&capSec[team]>=capSec[opp]));
-        if(rev){ st.on=false; st.meet=0; st.miss=0; }                          // 明显逆转(任一落后项追平)→立即暂停奋进
-        else if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=5000){ st.on=false; st.meet=0; } }
+        if(rev){ st.on=false; st.miss=0; st.cool=3000; }                       // 动态逆转→立即退出(3秒内不重入,防抖振)
+        else if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=3000){ st.on=false; st.miss=0; } }   // 滞回3秒
       }
     }
     if(S._striveSt.blue.on && S._striveSt.red.on){                             // 硬互斥兜底：绝不允许双方同时奋进,关掉兵力强的一方
@@ -830,7 +837,7 @@ function render(S){
   const rev=new Set(); if(CFG.fog){ for(const row of S.tiles) for(const t of row){ if(t&&t.building&&TEAM[t.building.owner]==='blue'){ rev.add(t.r*CFG.cols+t.c); for(const n of neighbors(t.c,t.r)) rev.add(n.r*CFG.cols+n.c); } } }
   for(let r=0;r<CFG.rows;r++) for(let c=0;c<CFG.cols;c++){ const t=S.tiles[r][c]; if(!t) continue; const {x,y}=center(c,r);
     const cd=t.lockUntil>S.timeMs;
-    if(cd && !t.building){ hexPath(x,y); ctx.fillStyle='#f1efe8'; ctx.fill(); ctx.setLineDash([3,2]); ctx.strokeStyle='#c9c7bd'; ctx.lineWidth=1; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=COL.no; ctx.font='10px sans-serif'; ctx.textAlign='center'; bill(x,y,(bx,by)=>ctx.fillText(Math.ceil((t.lockUntil-S.timeMs)/1000)+'s',bx,by+3.5)); continue; }
+    if(cd && !t.building){ const lo=OWN[t.owner]||OWN.N; hexPath(x,y); ctx.fillStyle=lo.tint; ctx.fill(); ctx.setLineDash([3,2]); ctx.strokeStyle=lo.border; ctx.lineWidth=1; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=lo.fill; ctx.font='10px sans-serif'; ctx.textAlign='center'; bill(x,y,(bx,by)=>ctx.fillText(Math.ceil((t.lockUntil-S.timeMs)/1000)+'s',bx,by+3.5)); continue; }   // 拆掉敌楼即归属己方——锁定期按新归属浅色显示
     if(t.building){ const b=t.building; const oc=OWN[b.owner]; hexPath(x,y); ctx.fillStyle=oc.fill; ctx.fill();
       if(S._strive && S._strive[TEAM[b.owner]]){ const pulse=0.06+0.12*Math.abs(Math.sin(S.timeMs/180)); ctx.fillStyle='rgba(255,180,60,'+pulse.toFixed(2)+')'; ctx.fill(); }
       ctx.lineWidth=1; ctx.strokeStyle=oc.fill; ctx.stroke();
