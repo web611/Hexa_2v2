@@ -94,7 +94,7 @@
         <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-rules">玩法</button><button class="js-prob">概率</button><button class="js-deck">卡组</button><button class="js-rank">榜单</button></div>
       </div>
     </div>
-    <div id="rankModal" style="display:none;" class="modal-bg">
+    <div id="rankModal" style="display:none;z-index:30;" class="modal-bg">
       <div class="modal">
         <div class="result-title" style="color:#26261f;">排行榜</div>
         <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px;">
@@ -106,7 +106,7 @@
         <button id="rankClose" style="margin-top:12px;">关闭</button>
       </div>
     </div>
-    <div id="rulesModal" style="display:none;" class="modal-bg">
+    <div id="rulesModal" style="display:none;z-index:30;" class="modal-bg">
       <div class="modal">
         <div class="result-title" style="color:#26261f;">玩法规则</div>
         <div id="rulesBody" class="deck-grid" style="max-height:62vh;font-size:13px;color:#555;line-height:1.75;text-align:left;"></div>
@@ -129,6 +129,7 @@
           <div>
             <b style="color:#26261f;">注意要点</b><br>
             · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>：整个圈子不可穿越，兵会绕道走，先发育。<br>
+            · 全图五个区域（四家＋中央）地块类型各自严格按 <b>兵营50% · 问号30% · 塔15% · 宝矿5%</b> 配比随机落位。<br>
             · 主城每次产出 <b>8 宝石</b>；<b>敌方建筑不可穿越</b>——挡路必须先拆掉；<b>拆掉敌方建筑该格立刻归你</b>（重建冷却期按新归属浅色显示）。<br>
             · 每队兵上限 <b>50</b>（巨龙不占额）；接近上限时出兵额度自动向<b>兵少的队友</b>倾斜，尽量均分；满编后兵营照常生产、新兵进入<b>屯兵队列</b>，一有兵阵亡立刻按先进先出补上（原兵营被拆则该批屯兵作废）。<br>
             · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +50%</b>、<b>防御塔射速 +30%</b>直到追回差距（达标<b>即刻开启</b>；人口/领地/占营三项中<b>≥2 项不落后即刻退出</b>，每秒判定2次）；<b>队友主城被摧毁</b>的一方最高优先开启（但三项全不落后时同样退出，劣势再现自动重开）；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
@@ -164,7 +165,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.19 · 更新 2026-07-20 14:02';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.22 · 更新 2026-07-20 14:27';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -273,13 +274,23 @@ const SIM = {
     for(let r=0;r<CFG.rows;r++){ tiles[r]=[]; for(let c=0;c<CFG.cols;c++){
       if(!playable(c,r)){ tiles[r][c]=null; continue; }
       const owner=homeOwner(c,r);
-      const type=rng.weighted(CFG.tileTypeRatio);
-      const t={c,r,owner,type,building:null,lockUntil:0,lockOwner:null,isBase:isBaseCell(c,r)};
-      if(type==='barracks') t.price=parseInt(rng.weighted(CFG.barracksPriceDist),10);
+      const t={c,r,owner,type:'question',building:null,lockUntil:0,lockOwner:null,isBase:isBaseCell(c,r)};
       tiles[r][c]=t;
     }}
+    // 五区严格配比：每个区域(四家+中央)独立按 兵营50%/问号30%/塔15%/矿5% 精确配额,洗牌后落位
+    { const regions={A:[],B:[],C:[],D:[],N:[]};
+      for(const row of tiles) for(const t of row){ if(t&&!t.isBase) regions[homeOwner(t.c,t.r)].push(t); }
+      for(const key of Object.keys(regions)){ const arr=regions[key]; const n=arr.length; if(!n) continue;
+        const nB=Math.round(n*0.50), nQ=Math.round(n*0.30), nT=Math.round(n*0.15);
+        const types=[];
+        for(let i=0;i<nB;i++)types.push('barracks'); for(let i=0;i<nQ;i++)types.push('question'); for(let i=0;i<nT;i++)types.push('tower');
+        while(types.length<n)types.push('mine');                                // 余数补给矿(≈5%)
+        for(let i=types.length-1;i>0;i--){ const j=Math.floor(rng.next()*(i+1)); const tmp=types[i]; types[i]=types[j]; types[j]=tmp; }   // Fisher-Yates
+        for(let i=0;i<n;i++){ const t=arr[i]; t.type=types[i];
+          if(t.type==='barracks') t.price=parseInt(rng.weighted(CFG.barracksPriceDist),10); else delete t.price; }
+      } }
     const per=(v)=>({A:v,B:v,C:v,D:v});
-    const S={ tiles, units:[], projs:[], gems:per(CFG.startGems), timeMs:0, over:false,
+    const S={ tiles, units:[], projs:[], fx:[], gems:per(CFG.startGems), timeMs:0, over:false,
       winner:null, winCond:null, nextId:1, seed, ab, rng, mines:per(0), twoMineSide:null,
       flipsSinceLegend:per(0), flipsSinceMine:per(0), events:[], leader:null, builtCount:per(0),
       axis:AXIS, seed:this._seed, base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base',
@@ -368,7 +379,8 @@ const SIM = {
     // 互斥：双方同时达标 → 灭家方优先；否则「兵力更弱」的一方(兵数相同则维持已开启方,否则蓝优先)
     const weaker = (elim.blue!==elim.red) ? (elim.blue?'blue':'red')
                  : (teamU.blue<teamU.red?'blue' : teamU.red<teamU.blue?'red' : (S._striveSt.blue.on?'blue' : S._striveSt.red.on?'red' : 'blue'));
-    if(meets.blue && meets.red){ if(weaker==='blue') meets.red=false; else meets.blue=false; }
+    let want=null;                                                             // 每帧仲裁出「唯一」应开启方,杜绝双开
+    if(meets.blue && meets.red) want=weaker; else if(meets.blue) want='blue'; else if(meets.red) want='red';
     const tc0=S._tileCnt||{blue:0,red:0};
     // 动态逆转判定：每秒刷新2次，统计「人口/领地/占营」三项中不落后(追平即算)的项数
     S._revCd=(S._revCd===undefined?0:S._revCd)-dt;
@@ -378,13 +390,18 @@ const SIM = {
       S._parity={ blue:pk('blue','red'), red:pk('red','blue') }; }
     const par=S._parity||{blue:{ok:0,tot:0},red:{ok:0,tot:0}};
     for(const team of ['blue','red']){
-      const st=S._striveSt[team];
+      const st=S._striveSt[team]; const other=team==='blue'?'red':'blue'; const ot=S._striveSt[other];
       st.cool=Math.max(0,(st.cool||0)-dt);
       const p=par[team];
       const rev = elim[team] ? (p.tot>0 && p.ok>=p.tot) : (p.ok>=2);           // 退出线：≥2个有意义项不落后即退(灭家方需全部有意义项不落后)
-      if(!st.on){ if(meets[team] && st.cool<=0){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.striveStat[team].n++; } }   // 达标即开启
-      else {
+      if(!st.on){
+        if(want===team && st.cool<=0 && !rev){                                 // 达标即开启；已处于"不落后"状态则不虚开(修横幅闪现)
+          st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.striveStat[team].n++;
+          if(ot.on){ ot.on=false; ot.miss=0; }                                 // 仲裁易主→对方立即让位(杜绝双开)
+        }
+      } else {
         if(rev){ st.on=false; st.miss=0; st.cool=3000; }                       // 动态逆转→立即退出(3秒内不重入,防抖振)
+        else if(want===other){ st.on=false; st.miss=0; }                       // 仲裁改判对方→立即退出
         else if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=3000){ st.on=false; st.miss=0; } }   // 滞回3秒
       }
     }
@@ -427,6 +444,8 @@ const SIM = {
         const bt=S.tiles[e.r][e.c]; if(!(bt&&bt.building&&bt.building.kind==='barracks'&&bt.building.owner===e.o)) continue;
         spawnUnit(S,e.o,e.card,e.c,e.r); uc[e.o]++;
       } }
+    // 特效老化
+    if(S.fx && S.fx.length){ for(const f of S.fx) f.t+=dt; S.fx=S.fx.filter(f=>f.t<f.dur); }
     // 子弹
     for(const p of S.projs){ p.t+=dt; if(p.tU && p.tU.hp>0){ p.bx=p.tU.px; p.by=p.tU.py; } if(p.t>=p.dur && !p.done){ p.done=true; projHit(S,p); } }
     S.projs=S.projs.filter(p=>!p.done);
@@ -558,14 +577,21 @@ function dealDamage(S,u,tgt,kind,spec,tile){ let dmg=spec.atk; if(kind==='buildi
   if(spec.aoe){ const cc=kind==='unit'?tgt:{c:tile.c,r:tile.r}; for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&e!==tgt&&hexDist(cc.c,cc.r,e.c,e.r)<=(spec.splash||1)) hitUnit(S,e,spec.atk,u.owner); } }
   if(kind==='building'&&tgt.hp<=0){ S.stats[tgt.owner].bLoss++; S.stats[u.owner].bDestroy++; const tl=S.tiles[tile.r][tile.c]; tl.building=null; S._bRev=(S._bRev||0)+1; tl.owner=u.owner; tl.lockUntil=S.timeMs+CFG.rebuildCooldownMs; tl.lockOwner=tgt.owner; }
 }
-function heroSkill(S,u,spec){ for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&hexDist(u.c,u.r,e.c,e.r)<=spec.hero.skillRange) hitUnit(S,e,spec.hero.skillDmg,u.owner); }
+function heroSkill(S,u,spec){
+  pushFx(S,{kind:'ring',x:u.px,y:u.py,t:0,dur:650,c:'#ff9b2f',r:spec.hero.skillRange*DX});
+  pushFx(S,{kind:'flash',x:u.px,y:u.py,t:0,dur:300,c:'#ffd34a',r:12}); for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&hexDist(u.c,u.r,e.c,e.r)<=spec.hero.skillRange) hitUnit(S,e,spec.hero.skillDmg,u.owner); }
   for(const row of S.tiles) for(const t of row){ if(t&&t.building&&isEnemy(t.building.owner,u.owner)&&hexDist(u.c,u.r,t.c,t.r)<=spec.hero.skillRange){ t.building.hp-=spec.hero.skillDmg*(1+spec.hero.buildingBonus); if(t.building.hp<=0){ const b=t.building; S.stats[b.owner].bLoss++; S.stats[u.owner].bDestroy++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=u.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } } }
+function pushFx(S,o){ if(!S.fx) S.fx=[]; if(S.fx.length<120) S.fx.push(o); }
 function fireProjectile(S,owner,ax,ay,tU,tTile,dmg,aoe,splash,kind,srcT){
   let bx,by; if(tU){ bx=tU.px; by=tU.py; } else if(tTile){ const c=center(tTile.c,tTile.r); bx=c.x; by=c.y; } else { bx=ax; by=ay; }
-  const dist=Math.hypot(bx-ax,by-ay); const sp=(CFG.projSpeed&&CFG.projSpeed[kind])||0.6; const dur=Math.max(90,Math.min(1400,dist/sp));
+  const dist=Math.hypot(bx-ax,by-ay); const sp=((CFG.projSpeed&&CFG.projSpeed[kind])||0.6)*0.7; const dur=Math.max(120,Math.min(1800,dist/sp));   // 弹速放慢30%,轨迹更易读
+  pushFx(S,{kind:'flash',x:ax,y:ay,t:0,dur:240,c:kind==='magic'?'#9a7bff':kind==='fire'?'#ff9b2f':'#d8b04a',r:7});
   S.projs.push({owner,ax,ay,t:0,bx,by,dur,kind,dmg,aoe,splash,srcT:!!srcT,tU:tU||null,tTile:tTile?{c:tTile.c,r:tTile.r}:null,done:false});
 }
 function projHit(S,p){
+  const ic=p.kind==='magic'?'#9a7bff':p.kind==='fire'?'#ff9b2f':'#d8b04a';
+  pushFx(S,{kind:'spark',x:p.bx,y:p.by,t:0,dur:280,c:ic,r:6});
+  if(p.aoe && p.splash>0) pushFx(S,{kind:'ring',x:p.bx,y:p.by,t:0,dur:520,c:ic,r:(p.splash+0.45)*DX});   // 面攻击:冲击波显示实际溅射范围
   if(p.tU){ if(p.tU.hp>0){ hitUnit(S,p.tU,p.dmg,p.owner); if(p.aoe){ for(const e of S.units){ if(isEnemy(e.owner,p.owner)&&e!==p.tU&&e.hp>0&&hexDist(p.tU.c,p.tU.r,e.c,e.r)<=(p.splash||1)){ if(p.srcT&&isBaseCell(e.c,e.r)) continue; hitUnit(S,e,p.dmg,p.owner); } } } } }
   else if(p.tTile){ const t=S.tiles[p.tTile.r][p.tTile.c]; const b=t&&t.building; if(b && isEnemy(b.owner,p.owner)){ b.hp-=p.dmg; if(b.hp<=0){ S.stats[b.owner].bLoss++; S.stats[p.owner].bDestroy++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=p.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } }
 }
@@ -885,11 +911,23 @@ function render(S){
       });   // 图标/问号在上、价格在下整组直立
     }
   }
-  // 子弹
+  // 子弹(带拖尾:看得清从哪发出打到哪)
   for(const p of S.projs){ const f=Math.max(0,Math.min(1,p.t/p.dur)); const px=p.ax+(p.bx-p.ax)*f, py=p.ay+(p.by-p.ay)*f; const ang=Math.atan2(p.by-p.ay,p.bx-p.ax); const oc=OWN[p.owner].fill;
+    { const f0=Math.max(0,f-0.22); const tx=p.ax+(p.bx-p.ax)*f0, ty=p.ay+(p.by-p.ay)*f0;
+      ctx.save(); const tg=ctx.createLinearGradient(tx,ty,px,py);
+      const tc=p.kind==='magic'?'154,123,255':p.kind==='fire'?'255,155,47':'216,176,74';
+      tg.addColorStop(0,'rgba('+tc+',0)'); tg.addColorStop(1,'rgba('+tc+',0.55)');
+      ctx.strokeStyle=tg; ctx.lineWidth=p.kind==='fire'?4:2.5; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(px,py); ctx.stroke(); ctx.restore(); }
     if(p.kind==='fire'){ ctx.save(); const g=ctx.createRadialGradient(px,py,0,px,py,9); g.addColorStop(0,'#fff2b0'); g.addColorStop(.45,'#ff9b2f'); g.addColorStop(1,'rgba(210,50,15,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,9,0,7); ctx.fill(); ctx.fillStyle='#ffe08a'; ctx.beginPath(); ctx.arc(px,py,3.4,0,7); ctx.fill(); ctx.restore(); }
     else if(p.kind==='magic'){ ctx.save(); const g=ctx.createRadialGradient(px,py,0,px,py,7); g.addColorStop(0,'#efe9ff'); g.addColorStop(.5,'#9a7bff'); g.addColorStop(1,'rgba(120,90,220,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,7,0,7); ctx.fill(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(px,py,2.2,0,7); ctx.fill(); ctx.restore(); }
     else if(p.kind==='arrow'){ ctx.save(); ctx.translate(px,py); ctx.rotate(ang); ctx.strokeStyle=oc; ctx.lineWidth=1.8; ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(3,0); ctx.stroke(); ctx.fillStyle=oc; ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(2,-2.3); ctx.lineTo(2,2.3); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  }
+  // 攻击特效: 发射闪光/命中火花/面攻击冲击环(显示实际作用范围)
+  if(S.fx) for(const f of S.fx){ const k=Math.max(0,Math.min(1,f.t/f.dur)); const ease=1-Math.pow(1-k,2);
+    if(f.kind==='ring'){ ctx.save(); ctx.globalAlpha=0.85*(1-k); ctx.strokeStyle=f.c; ctx.lineWidth=2.6*(1-k)+0.8; ctx.beginPath(); ctx.arc(f.x,f.y,4+ease*f.r,0,7); ctx.stroke();
+      ctx.globalAlpha=0.10*(1-k); ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,4+ease*f.r,0,7); ctx.fill(); ctx.restore(); }
+    else if(f.kind==='flash'){ ctx.save(); ctx.globalAlpha=0.9*(1-k); const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.r*(1+k)); g.addColorStop(0,'#ffffff'); g.addColorStop(.4,f.c); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(f.x,f.y,f.r*(1+k),0,7); ctx.fill(); ctx.restore(); }
+    else if(f.kind==='spark'){ ctx.save(); ctx.globalAlpha=1-k; ctx.strokeStyle=f.c; ctx.lineWidth=1.6; for(let i=0;i<5;i++){ const a2=i*1.256+f.x%1; const rr=f.r*(0.4+ease); ctx.beginPath(); ctx.moveTo(f.x+Math.cos(a2)*2,f.y+Math.sin(a2)*2); ctx.lineTo(f.x+Math.cos(a2)*rr,f.y+Math.sin(a2)*rr); ctx.stroke(); } ctx.restore(); }
     else { ctx.save(); ctx.translate(px,py); ctx.rotate(ang); ctx.fillStyle=oc; ctx.beginPath(); ctx.ellipse(0,0,4.5,1.7,0,0,7); ctx.fill(); ctx.restore(); } }
   // 单位
   for(const u of S.units){ const x=u.px,y=u.py; const col=OWN[u.owner].fill;
@@ -1065,7 +1103,9 @@ async function buildRank(sortKey){
                   : key==='avg'  ? ((y.avg||-1)-(x.avg||-1))||(y.mvp-x.mvp)||(y.wins-x.wins)
                   : (y.mvp-x.mvp)||(y.wins-x.wins)||((y.avg||0)-(x.avg||0)) );
   let html='<table style="width:100%;border-collapse:collapse;"><tr style="color:#888;"><td style="padding:3px 6px;">#</td><td style="text-align:left;">用户名</td><td>MVP</td><td>胜场</td><td>平均取胜分</td><td>总局数</td></tr>';
-  rows.forEach((r,i)=>{ html+='<tr'+(r.name===PLAYER_NAME?' style="font-weight:700;color:#2f7ed8;"':'')+'><td style="padding:3px 6px;">'+(i+1)+'</td><td style="text-align:left;">'+r.name+'</td><td style="text-align:center;">'+r.mvp+'</td><td style="text-align:center;">'+r.wins+'</td><td style="text-align:center;">'+(r.avg==null?'—':r.avg.toFixed(1))+'</td><td style="text-align:center;">'+r.games+'</td></tr>'; });
+  rows.forEach((r,i)=>{ const avgCell = r.avg!=null ? r.avg.toFixed(1)
+      : (r.winN>0 ? '<span style="color:#b7b5aa;">'+(r.winScoreSum/r.winN).toFixed(1)+'<small>(不足3胜)</small></span>' : '—');
+    html+='<tr'+(r.name===PLAYER_NAME?' style="font-weight:700;color:#2f7ed8;"':'')+'><td style="padding:3px 6px;">'+(i+1)+'</td><td style="text-align:left;">'+r.name+'</td><td style="text-align:center;">'+r.mvp+'</td><td style="text-align:center;">'+r.wins+'</td><td style="text-align:center;">'+avgCell+'</td><td style="text-align:center;">'+r.games+'</td></tr>'; });
   html+='</table>'; if(!rows.length) html='<div style="color:#999;padding:14px;">暂无战绩——登录用户名并打完一局后上榜</div>';
   document.getElementById('rankBody').innerHTML=html;
 }
@@ -1075,7 +1115,7 @@ document.getElementById('rankInit').onclick=async ()=>{ const el=document.getEle
   try{ const id=await CLOUD.create(); el.textContent='✓ 已创建！Bin ID：'+id+'（请把此ID发给开发者固化进代码，其他玩家才能共享）'; document.getElementById('rankInit').style.display='none'; RANK_DOC=null; }
   catch(e){ el.textContent='创建失败：'+e.message+'（检查网络/Key）'; } };
 document.querySelectorAll('.rk-sort').forEach(b=>b.onclick=()=>{ RANK_SORT=b.getAttribute('data-k'); document.querySelectorAll('.rk-sort').forEach(x=>x.classList.toggle('on',x===b)); buildRank(RANK_SORT); });
-document.getElementById('rankClose').onclick=()=>{ document.getElementById('rankModal').style.display='none'; };
+document.getElementById('rankClose').onclick=()=>{ document.getElementById('rankModal').style.display='none'; paused=false; };
 function showRules(){ document.getElementById('rulesBody').innerHTML=document.getElementById('rulesContent').innerHTML; document.getElementById('rulesModal').style.display='flex'; }
 document.getElementById('btnRules').onclick=showRules;
 document.querySelectorAll('.js-rules').forEach(b=>b.onclick=showRules);
@@ -1223,7 +1263,7 @@ function drawPhaseOverlay(){ if(PHASE.mode==='play') return; const cx=RW()/2, cy
 /* 启动 */
 setupCanvas(); buildDeck(); document.getElementById('verInfo').textContent=APP_VERSION;
 let looping=false;
-function beginMatch(){ const nm=(document.getElementById('loginName').value||'').trim(); if(nm){ PLAYER_NAME=nm; Store.setUser(nm); } document.getElementById('startModal').style.display='none'; setupCanvas(); newMatch(); if(!looping){ looping=true; requestAnimationFrame(loop); } }
+function beginMatch(){ paused=false; const nm=(document.getElementById('loginName').value||'').trim(); if(nm){ PLAYER_NAME=nm; Store.setUser(nm); } document.getElementById('startModal').style.display='none'; setupCanvas(); newMatch(); if(!looping){ looping=true; requestAnimationFrame(loop); } }
 document.getElementById('startBtn').onclick=beginMatch;
 try{ document.getElementById('loginName').value=PLAYER_NAME; }catch(e){}
 </script>
