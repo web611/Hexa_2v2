@@ -100,7 +100,9 @@
         <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px;">
           <button class="rk-sort on" data-k="mvp">按MVP</button><button class="rk-sort" data-k="wins">按胜场</button><button class="rk-sort" data-k="avg">按平均取胜分</button>
         </div>
-        <div id="rankBody" style="font-size:12.5px;color:#555;max-height:48vh;overflow:auto;"></div>
+        <div id="rankSrc" style="font-size:11px;color:#a9a79d;margin-bottom:6px;"></div>
+        <div id="rankBody" style="font-size:12.5px;color:#555;max-height:44vh;overflow:auto;"></div>
+        <button id="rankInit" style="display:none;margin-top:10px;">创建云端榜单库（仅管理员点一次）</button>
         <button id="rankClose" style="margin-top:12px;">关闭</button>
       </div>
     </div>
@@ -162,7 +164,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.17 · 更新 2026-07-20 10:33';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.19 · 更新 2026-07-20 14:02';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -988,6 +990,46 @@ document.querySelectorAll('#cmdBar .cmd[data-cmd]').forEach(b=>b.onclick=()=>{ i
 document.querySelectorAll('.js-deck').forEach(b=>b.onclick=()=>{ paused=true; buildDeck(); document.getElementById('deckModal').style.display='flex'; });
 document.getElementById('deckClose').onclick=()=>{ document.getElementById('deckModal').style.display='none'; paused=false; };
 document.querySelectorAll('.js-prob').forEach(b=>b.onclick=()=>{ paused=true; buildProb(); document.getElementById('probModal').style.display='flex'; });
+/* ── 云端存储适配层（jsonbin.io v3；本地为兜底） ── */
+const CLOUD={
+  key:'$2a$10$6XyY9n8Zy0Q/jN36QkiAUu/OKp3gthbNqAaG9KbRnQGNYONhqdVWi',
+  base:'https://api.jsonbin.io/v3/b',
+  binId:'6a5db950da38895dfe749f08',   // 已固化：全体玩家共享的云端榜单库
+  enabled(){ return !!this.binId && typeof fetch==='function'; },
+  async read(){ const r=await fetch(this.base+'/'+this.binId+'/latest',{headers:{'X-Access-Key':this.key}}); if(!r.ok) throw new Error('read '+r.status); return (await r.json()).record; },
+  async write(doc){ const r=await fetch(this.base+'/'+this.binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Access-Key':this.key},body:JSON.stringify(doc)}); if(!r.ok) throw new Error('write '+r.status); },
+  async create(){ const r=await fetch(this.base,{method:'POST',headers:{'Content-Type':'application/json','X-Access-Key':this.key,'X-Bin-Name':'hexa_2v2','X-Bin-Private':'true'},body:JSON.stringify({v:1,users:{},updatedAt:Date.now()})});
+    if(!r.ok) throw new Error('create '+r.status); const j=await r.json(); const id=j.metadata&&j.metadata.id; if(!id) throw new Error('no id');
+    try{localStorage.setItem('hexwar_binid',id);}catch(e){} this.binId=id; return id; }
+};
+// 赛后上报：读→合并本人聚合与近10局→写回（失败进本地待补队列，下次机会重试）
+async function cloudReport(rec){
+  const me=rec.players&&rec.players[0]; if(!me||!me.name) return;
+  if(!CLOUD.enabled()){ pendPush(rec); return; }
+  try{
+    await pendFlush();
+    const doc=(await CLOUD.read())||{users:{}}; doc.users=doc.users||{};
+    mergeRec(doc,rec);
+    doc.updatedAt=Date.now();
+    await CLOUD.write(doc);
+  }catch(e){ pendPush(rec); }
+}
+function mergeRec(doc,rec){ const me=rec.players[0];
+  const u=doc.users[me.name]||(doc.users[me.name]={games:0,wins:0,mvp:0,winScoreSum:0,winN:0,recent:[]});
+  u.games++; if(rec.winnerTeam==='blue'){ u.wins++; u.winScoreSum+=me.score; u.winN++; }
+  if(me.mvp) u.mvp++;
+  u.recent=u.recent||[]; u.recent.unshift({ts:rec.ts,win:rec.winnerTeam==='blue',score:me.score,mvp:me.mvp,cond:rec.winCond,sec:rec.durationSec});
+  if(u.recent.length>10) u.recent.length=10;
+  u.lastTs=rec.ts;
+}
+function pendPush(rec){ try{ const q=JSON.parse(localStorage.getItem('hexwar_pending')||'[]'); q.push(rec); while(q.length>50)q.shift(); localStorage.setItem('hexwar_pending',JSON.stringify(q)); }catch(e){} }
+async function pendFlush(){ let q=[]; try{ q=JSON.parse(localStorage.getItem('hexwar_pending')||'[]'); }catch(e){}
+  if(!q.length||!CLOUD.enabled()) return;
+  const doc=(await CLOUD.read())||{users:{}}; doc.users=doc.users||{};
+  for(const rec of q) mergeRec(doc,rec);
+  doc.updatedAt=Date.now(); await CLOUD.write(doc);
+  try{localStorage.setItem('hexwar_pending','[]');}catch(e){}
+}
 /* ── 本地战绩存储 ── */
 const Store={
   user(){ try{return localStorage.getItem('hexwar_user')||'';}catch(e){return '';} },
@@ -999,12 +1041,24 @@ let PLAYER_NAME=Store.user()||'';
 function mvpScore(S,p){ const w=CFG.mvpWeights, st=S.stats[p];
   return st.kills*w.kill + st.bDestroy*w.bDestroy + st.prodU*w.prodU + st.built*w.built + st.earn*w.earn
        + st.garrisonMs/1000*w.garrisonSec + st.dragons*w.dragon + (TEAM[p]===S.winner?w.winBonus:0) - st.loss*w.lossPen; }
-function buildRank(sortKey){
+let RANK_DOC=null;
+function rankRowsLocal(){
   const agg={};
   for(const m of Store.matches()){ const me=m.players&&m.players[0]; if(!me||me.id!=='A'||!me.name) continue;
     const a=agg[me.name]||(agg[me.name]={name:me.name,games:0,wins:0,mvp:0,winScoreSum:0,winN:0});
     a.games++; if(m.winnerTeam==='blue'){ a.wins++; a.winScoreSum+=me.score; a.winN++; } if(me.mvp) a.mvp++; }
-  const rows=Object.values(agg);
+  return Object.values(agg);
+}
+async function buildRank(sortKey){
+  const srcEl=document.getElementById('rankSrc'), initBtn=document.getElementById('rankInit');
+  initBtn.style.display = CLOUD.binId ? 'none' : '';
+  let rows=null, src='';
+  if(CLOUD.enabled()){
+    if(!RANK_DOC){ srcEl.textContent='云端榜单加载中…'; try{ await pendFlush(); RANK_DOC=await CLOUD.read(); }catch(e){ RANK_DOC=null; } }
+    if(RANK_DOC&&RANK_DOC.users){ rows=Object.entries(RANK_DOC.users).map(([name,u])=>({name,games:u.games,wins:u.wins,mvp:u.mvp,winScoreSum:u.winScoreSum,winN:u.winN})); src='☁ 云端榜单（全体玩家）'; }
+  }
+  if(!rows){ rows=rankRowsLocal(); src=CLOUD.binId?'⚠ 云端不可用 · 显示本机榜单':'本机榜单（云端库未创建）'; }
+  srcEl.textContent=src;
   for(const r of rows) r.avg = r.winN>=3 ? r.winScoreSum/r.winN : null;
   const key=sortKey||'mvp';
   rows.sort((x,y)=> key==='wins' ? (y.wins-x.wins)||(y.mvp-x.mvp)||((y.avg||0)-(x.avg||0))
@@ -1016,7 +1070,10 @@ function buildRank(sortKey){
   document.getElementById('rankBody').innerHTML=html;
 }
 let RANK_SORT='mvp';
-document.querySelectorAll('.js-rank').forEach(b=>b.onclick=()=>{ paused=true; buildRank(RANK_SORT); document.getElementById('rankModal').style.display='flex'; });
+document.querySelectorAll('.js-rank').forEach(b=>b.onclick=()=>{ paused=true; RANK_DOC=null; buildRank(RANK_SORT); document.getElementById('rankModal').style.display='flex'; });
+document.getElementById('rankInit').onclick=async ()=>{ const el=document.getElementById('rankSrc'); el.textContent='正在创建云端库…';
+  try{ const id=await CLOUD.create(); el.textContent='✓ 已创建！Bin ID：'+id+'（请把此ID发给开发者固化进代码，其他玩家才能共享）'; document.getElementById('rankInit').style.display='none'; RANK_DOC=null; }
+  catch(e){ el.textContent='创建失败：'+e.message+'（检查网络/Key）'; } };
 document.querySelectorAll('.rk-sort').forEach(b=>b.onclick=()=>{ RANK_SORT=b.getAttribute('data-k'); document.querySelectorAll('.rk-sort').forEach(x=>x.classList.toggle('on',x===b)); buildRank(RANK_SORT); });
 document.getElementById('rankClose').onclick=()=>{ document.getElementById('rankModal').style.display='none'; };
 function showRules(){ document.getElementById('rulesBody').innerHTML=document.getElementById('rulesContent').innerHTML; document.getElementById('rulesModal').style.display='flex'; }
@@ -1137,6 +1194,7 @@ function showResult(S){ const win=S.winner==='blue'; document.getElementById('re
                 earn:Math.floor(g(p,'earn')), spent:Math.floor(g(p,'spent')),
                 garrisonSec:Math.round(g(p,'garrisonMs')/1000), dragons:g(p,'dragons'), tilesEnd:tiles[p] } })) };
     Store.save(rec);
+    cloudReport(rec);   // 云端上报(异步,失败进待补队列)
   }
   document.getElementById('resultModal').style.display='flex'; }
 document.getElementById('replayBtn').onclick=()=>{ TEL.all.push({event:'replay_click', ts:Date.now()}); newMatch(); };
