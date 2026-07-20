@@ -119,7 +119,7 @@
             <b style="color:#26261f;">基础玩法</b><br>
             · 你在<b style="color:#1f6fc4">下方（蓝队）</b>，队友在上方；左右两家是<b style="color:#c23b3b">红队</b>，2v2 对战。<br>
             · 开局<b>抽图定边</b>：地图旋转约 3 秒（点击可跳过）抽取本局方位，停稳后 3·2·1 倒计时开局——无论抽到哪个方向，你都在下、队友在上。<br>
-            · <b>点击己方浅色格「翻地建造」</b>：随机开出宝矿（产宝石）/ 兵营（自动出兵）/ 防御塔；离你现有建筑越远造价越贵。<br>
+            · <b>点击己方浅色格「翻地建造」</b>：随机开出宝矿（产宝石）/ 兵营（自动出兵）/ 防御塔；离你现有建筑越远造价越贵。只有<b>显示数字的照亮格</b>（邻接建筑或士兵刚走过）能翻——<b>AI 也受完全相同的限制</b>。<br>
             · 小兵全自动战斗：自动寻敌、走过的空地自动变成你的领地。<br>
             · 用底部四个指挥键调度全队部队：<b>攻左 / 防守 / 抢营 / 攻右</b>（默认防守：在自家建筑附近巡逻、救援被打的友军；若敌方两家集中大部分兵力围攻我队一家，另一家会自动抽调富余兵力驰援，调够即止、打退后回防）。<br>
             · <b>获胜方式</b>：驻守中央大本营把占领进度圈填满（独占约 60 秒）；或拆光敌队两座主城；5 分钟到时则比占领进度/占地多少。
@@ -162,7 +162,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.16 · 更新 2026-07-20 10:20';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.17 · 更新 2026-07-20 10:33';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -295,9 +295,23 @@ const SIM = {
     const final=Math.ceil(base*(1+(d-1)*CFG.distFactor));
     return {base, distance:d, final};
   },
+  revSet(S,team){   // 本队建筑及其邻接一圈=照亮区(与玩家屏幕上"显示数字"的规则一致)；按建筑版本缓存
+    S._revC=S._revC||{}; const cc=S._revC[team];
+    if(cc && cc.rev===(S._bRev||0)) return cc.set;
+    const set=new Set();
+    for(const row of S.tiles) for(const t of row){ if(t&&t.building&&TEAM[t.building.owner]===team){ set.add(t.r*CFG.cols+t.c); for(const n of neighbors(t.c,t.r)) set.add(n.r*CFG.cols+n.c); } }
+    S._revC[team]={rev:S._bRev||0, set}; return set;
+  },
+  tileRevealed(S,player,c,r){   // 人机同规则：邻接本队建筑，或本队士兵3秒内走过——即屏幕上"有数字"的格
+    if(!CFG.fog) return true;
+    const team=TEAM[player]; if(this.revSet(S,team).has(r*CFG.cols+c)) return true;
+    const t=S.tiles[r][c]; const seen=team==='blue'?t.seenB:t.seenR;
+    return S.timeMs-(seen||-1e9) < CFG.fogRevealMs;
+  },
   canFlip(S, player, c, r){
     const t=S.tiles[r] && S.tiles[r][c]; if(!t||t.isBase||t.building) return false;   // 大本营不可建造
     if(!isAlly(t.owner,player) && t.owner!=='N') return false;                        // 自己/友方的空地，或未被占领过的中立地都可建造
+    if(!this.tileRevealed(S,player,c,r)) return false;                                // 只能翻「有数字」的照亮格：邻接建筑或士兵刚走过(人机同规则,AI不得越界)
     if(t.lockUntil>S.timeMs){ const sc=CFG.rebuildScope; if(sc==='both' || (sc==='ownerOnly'&&t.lockOwner===player) || (sc==='defender'&&t.lockOwner!==player)) return false; }
     return S.gems[player] >= this.cost(S,player,c,r).final;
   },
@@ -494,7 +508,7 @@ const SIM = {
     }
     for(const u of S.units) if(u.hp<=0) S.stats[u.owner].loss++;
     S.units=S.units.filter(u=>u.hp>0);
-    for(const u of S.units){ if(TEAM[u.owner]==='blue'){ const tt=S.tiles[u.r] && S.tiles[u.r][u.c]; if(tt) tt.seen=S.timeMs; } }
+    for(const u of S.units){ const tt=S.tiles[u.r] && S.tiles[u.r][u.c]; if(tt){ if(TEAM[u.owner]==='blue') tt.seenB=S.timeMs; else tt.seenR=S.timeMs; } }
     // 中央大本营占领
     updateBase(S,dt);
     // 胜负
@@ -855,7 +869,7 @@ function render(S){
       if(t.isBase){ const hc=S.base&&S.base.hold; const gcol=hc==='blue'?'#2f7ed8':hc==='red'?'#d64545':hc==='contest'?'#c8860f':COL.gold;
         hexPath(x,y); ctx.save(); ctx.fillStyle=hc==='blue'?'rgba(47,126,216,0.20)':hc==='red'?'rgba(214,69,69,0.20)':'rgba(232,178,58,0.16)'; ctx.fill(); ctx.restore(); ctx.lineWidth=2.8; ctx.strokeStyle=gcol; ctx.stroke(); ctx.fillStyle=gcol; ctx.font='14px sans-serif'; ctx.textAlign='center'; bill(x,y,(bx,by)=>ctx.fillText('★',bx,by+5)); continue; }
       if(inRing){ hexPath(x,y); ctx.save(); ctx.setLineDash([2,2]); ctx.lineWidth=1.3; ctx.strokeStyle=COL.gold; ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
-      const revealed = !CFG.fog || rev.has(r*CFG.cols+c) || (S.timeMs-(t.seen||-1e9) < CFG.fogRevealMs);
+      const revealed = !CFG.fog || rev.has(r*CFG.cols+c) || (S.timeMs-(t.seenB||-1e9) < CFG.fogRevealMs);
       if(!revealed){ hexPath(x,y); ctx.fillStyle='rgba(120,118,110,0.30)'; ctx.fill(); continue; }
       const base=t.type==='barracks'?t.price : t.type==='question'?CFG.prices.question : CFG.prices[t.type];
       let finalCost=base, mine=(isAlly(t.owner,'A')||t.owner==='N');   // 自己/友方的地 + 未占领的中立地，玩家都能建
