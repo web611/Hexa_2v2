@@ -132,6 +132,7 @@
             · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>：整个圈子不可穿越，兵会绕道走，先发育。<br>
             · 全图五个区域（四家＋中央）地块类型各自严格按 <b>兵营50% · 问号30% · 塔15% · 宝矿5%</b> 配比随机落位。<br>
             · 主城每次产出 <b>8 宝石</b>；<b>敌方建筑不可穿越</b>——挡路必须先拆掉；<b>拆掉敌方建筑该格立刻归你</b>（重建冷却期按新归属浅色显示）。<br>
+            · <b>全歼奖励</b>：把敌方某一家的建筑<b>全部拆光</b>，你队立得 <b>人口上限+10</b>、两名成员各 <b>+50宝石</b>（每家只触发一次）。<br>
             · 每队兵上限 <b>50</b>（巨龙不占额）；接近上限时出兵额度自动向<b>兵少的队友</b>倾斜，尽量均分；满编后兵营照常生产、新兵进入<b>屯兵队列</b>，一有兵阵亡立刻按先进先出补上（原兵营被拆则该批屯兵作废）。<br>
             · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +50%</b>、<b>防御塔射速 +30%</b>直到追回差距（达标<b>即刻开启</b>；人口/领地/占营三项中<b>≥2 项不落后即刻退出</b>，每秒判定2次）；<b>队友主城被摧毁</b>的一方最高优先开启（但三项全不落后时同样退出，劣势再现自动重开）；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
             · 敌方占领<b>倒计时低于 20 秒</b>时，全队自动进入<b>紧急抢营</b>：全军压向中路、只清剿挡路敌兵不追远敌（射程内照常还手）、拆除中路敌方建筑、集中火力打大本营驻军（敌我同规则）。<br>
@@ -153,6 +154,7 @@
 <details class="panel">
   <summary>历史版本</summary>
   <div class="hint" style="line-height:1.9;">
+    v0.4.26 · 2026-07-20 · 全歼奖励：拆光敌方一家建筑→人口上限+10、全队各+50宝石，金色横幅+城头飘字<br>
     v0.4.25 · 2026-07-20 · 结算只自动弹一次(查看地图可正常关)、结算每行最佳值加粗/MVP橙色、确认巨龙计产出数<br>
     v0.4.24 · 2026-07-20 · 超时决胜改为 进度→占营时长→占格→击杀、结算可关闭看地图、范围环按实际半径双层+碎点、石块/火球重绘更醒目<br>
     v0.4.23 · 2026-07-20 · 结算补占营/占地、MVP计占地、驻营优先级(法&gt;弓&gt;骑&gt;民)、巨龙扔石头/火球燃烧、版本历史面板<br>
@@ -179,7 +181,7 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.25 · 更新 2026-07-20 16:27';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.26 · 更新 2026-07-20 17:02';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
@@ -309,7 +311,8 @@ const SIM = {
       flipsSinceLegend:per(0), flipsSinceMine:per(0), events:[], leader:null, builtCount:per(0),
       axis:AXIS, seed:this._seed, base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base',
       stats:{ A:mkPStat(), B:mkPStat(), C:mkPStat(), D:mkPStat() },
-      capMax:{blue:0,red:0}, striveStat:{blue:{n:0,ms:0},red:{n:0,ms:0}}, spawnQ:{blue:[],red:[]} };
+      capMax:{blue:0,red:0}, striveStat:{blue:{n:0,ms:0},red:{n:0,ms:0}}, spawnQ:{blue:[],red:[]},
+      capBonus:{blue:0,red:0}, _wiped:{A:false,B:false,C:false,D:false} };
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; place(S, r, c, {kind:'city',owner:p,hp:CFG.city.hp,maxHp:CFG.city.hp}); }
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; guaranteeBase(S, c, r); }
     S.events.push({event:'match_start', mapSeed:seed, ab, mode:'2v2_fourcorner'});
@@ -426,11 +429,20 @@ const SIM = {
     for(const team of ['blue','red']) if(S._striveSt[team].on){ mul[team]=2; S.striveStat[team].ms+=dt; }   // 奋进：产宝石速度提高一倍
     S._strive={blue:S._striveSt.blue.on, red:S._striveSt.red.on};
     S.capMax.blue=Math.max(S.capMax.blue,S.base.blue); S.capMax.red=Math.max(S.capMax.red,S.base.red);
-    const cityLive={}; const tcnt={blue:0,red:0};
-    for(const row of S.tiles) for(const t of row){ if(!t) continue; if(t.owner!=='N') tcnt[TEAM[t.owner]]++; const b=t.building; if(!b) continue; if(b.kind==='city') cityLive[b.owner]=true;
+    const cityLive={}; const tcnt={blue:0,red:0}; const bCnt={A:0,B:0,C:0,D:0};
+    for(const row of S.tiles) for(const t of row){ if(!t) continue; if(t.owner!=='N') tcnt[TEAM[t.owner]]++; const b=t.building; if(!b) continue; bCnt[b.owner]++; if(b.kind==='city') cityLive[b.owner]=true;
       const m=mul[TEAM[b.owner]]; let rate=0, lump=CFG.gemLump; if(b.kind==='city'){ rate=CFG.cityGemPerSec; lump=CFG.cityGemLump; } else if(b.kind==='mine') rate=CFG.mineGemPerSec;
       if(rate){ b.gemAcc=(b.gemAcc||0)+rate*m*dt/1000; while(b.gemAcc>=lump){ S.gems[b.owner]+=lump; S.stats[b.owner].earn+=lump; b.gemAcc-=lump; } } }
     S._cityAlive=cityLive; S._tileCnt=tcnt;
+    // 全歼奖励：某家建筑清零→对方全队 人口上限+10、两家各+50宝石(每家只触发一次)
+    for(const p of ['A','B','C','D']){ if(!S._wiped[p] && bCnt[p]===0 && S.timeMs>1000){
+      S._wiped[p]=true; const winT=TEAM[p]==='blue'?'red':'blue';
+      S.capBonus[winT]+=10;
+      const members=winT==='blue'?['A','C']:['B','D'];
+      for(const m of members){ S.gems[m]+=50; S.stats[m].earn+=50; }
+      S.rewardFx={until:S.timeMs+3400, team:winT, victim:p};
+      for(const m of members){ const cc=center(CITY_AT[m][0],CITY_AT[m][1]); pushFx(S,{kind:'flash',x:cc.x,y:cc.y,t:0,dur:700,c:'#ffd34a',r:20}); pushFx(S,{kind:'text',x:cc.x,y:cc.y-14,t:0,dur:1500,c:'#d99a1e',txt:'+50💎'}); }
+    } }
     // 出兵（人口上限按「队伍合计」；巨龙场上限1、不占人口）
     const uc={A:0,B:0,C:0,D:0}; for(const u of S.units) if(u.hp>0 && u.cardId!=='dragon') uc[u.owner]++;
     const teamCount=(o)=> TEAM[o]==='blue' ? uc.A+uc.C : uc.B+uc.D;
@@ -444,16 +456,18 @@ const SIM = {
         b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,'dragon',t.c,t.r); S.stats[b.owner].dragons++; }
       } else { b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv;
         const team=TEAM[b.owner], mate=MATE[b.owner];
-        const capped = teamCount(b.owner)>=CFG.unitCapPerTeam;
-        const yield_ = uc[b.owner]>=CFG.unitCapPerTeam/2 && barCnt[mate]>0 && uc[mate]<CFG.unitCapPerTeam/2;   // 均分让位
+        const capT=CFG.unitCapPerTeam+(S.capBonus?S.capBonus[team]:0);
+        const capped = teamCount(b.owner)>=capT;
+        const yield_ = uc[b.owner]>=capT/2 && barCnt[mate]>0 && uc[mate]<capT/2;   // 均分让位
         if(capped || yield_){ if(S.spawnQ[team].length<CFG.unitCapPerTeam) S.spawnQ[team].push({o:b.owner,card:b.cardId,c:t.c,r:t.r}); }   // 屯兵：满编/让位时产出进队列
         else { spawnUnit(S,b.owner,b.cardId,t.c,t.r); uc[b.owner]++; } } }
     }
     // 屯兵队列出兵：有空位→先进先出(尽量均分;原兵营被拆的条目作废)
     for(const team of ['blue','red']){ const q=S.spawnQ[team]; if(!q.length) continue; const rep=team==='blue'?'A':'B'; let guard=0;
-      while(q.length && teamCount(rep)<CFG.unitCapPerTeam && guard++<10){
+      const capT2=CFG.unitCapPerTeam+(S.capBonus?S.capBonus[team]:0);
+      while(q.length && teamCount(rep)<capT2 && guard++<10){
         let idx=0; const head=q[0]; const mo=MATE[head.o];
-        if(uc[head.o]>=CFG.unitCapPerTeam/2 && uc[mo]<CFG.unitCapPerTeam/2){ const j=q.findIndex(e=>e.o===mo); if(j>=0) idx=j; }
+        if(uc[head.o]>=capT2/2 && uc[mo]<capT2/2){ const j=q.findIndex(e=>e.o===mo); if(j>=0) idx=j; }
         const e=q.splice(idx,1)[0];
         const bt=S.tiles[e.r][e.c]; if(!(bt&&bt.building&&bt.building.kind==='barracks'&&bt.building.owner===e.o)) continue;
         spawnUnit(S,e.o,e.card,e.c,e.r); uc[e.o]++;
@@ -996,6 +1010,8 @@ function render(S){
         g2.addColorStop(0,'rgba(255,120,26,.9)'); g2.addColorStop(1,'rgba(255,220,90,0)');
         ctx.fillStyle=g2; ctx.beginPath(); ctx.moveTo(fx2-2.2,fy2); ctx.quadraticCurveTo(fx2,fy2-fh,fx2+2.2,fy2); ctx.closePath(); ctx.fill(); }
       ctx.restore(); }
+    else if(f.kind==='text'){ ctx.save(); ctx.globalAlpha=1-k; ctx.fillStyle=f.c; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
+      bill(f.x,f.y-14*ease,(bx,by)=>ctx.fillText(f.txt,bx,by)); ctx.restore(); }
     else if(f.kind==='spark'){ ctx.save(); ctx.globalAlpha=1-k; ctx.strokeStyle=f.c; ctx.lineWidth=1.6; for(let i=0;i<5;i++){ const a2=i*1.256+f.x%1; const rr=f.r*(0.4+ease); ctx.beginPath(); ctx.moveTo(f.x+Math.cos(a2)*2,f.y+Math.sin(a2)*2); ctx.lineTo(f.x+Math.cos(a2)*rr,f.y+Math.sin(a2)*rr); ctx.stroke(); } ctx.restore(); }
     else { ctx.save(); ctx.translate(px,py); ctx.rotate(ang); ctx.fillStyle=oc; ctx.beginPath(); ctx.ellipse(0,0,4.5,1.7,0,0,7); ctx.fill(); ctx.restore(); } }
   // 单位
@@ -1052,6 +1068,9 @@ function drawBanner(S){ const now=S.timeMs;
     bannerText(mine?'🔥 我方奋进模式开启 · 产宝石加速！':'🔥 敌方奋进模式开启！', mine?'#3f93ea':'#e05555', RH()*0.42, Math.min(1,rem/400), false); }
   if(S.flipFx && now<S.flipFx.until){ const rem=S.flipFx.until-now; const mine=TEAM[S.flipFx.side]==='blue';
     bannerText(mine?'🐉 我方抽到巨龙！':'🐉 敌方抽到巨龙！', mine?'#3f93ea':'#e05555', RH()*0.24, Math.min(1,rem/500), true); }
+  if(S.rewardFx && now<S.rewardFx.until){ const rem=S.rewardFx.until-now; const mine=S.rewardFx.team==='blue';
+    bannerText(mine?'🏆 全歼敌方一家建筑！人口上限 +10 · 全队各 +50💎':'⚠ 我方一家被全歼！敌方 人口+10 · +50💎',
+      mine?'#d99a1e':'#e05555', RH()*0.50, Math.min(1,rem/450), true); }
   if(S.heroFx && now<S.heroFx.until){ const rem=S.heroFx.until-now; const mine=TEAM[S.heroFx.side]==='blue'; bannerText(mine?'⚡ 巨龙出击 ⚡':'⚠ 敌方巨龙来袭 ⚠', mine?'#3f93ea':'#e05555', RH()*0.33, Math.min(1,rem/400), false); }
 }
 
@@ -1249,8 +1268,9 @@ function updateHUD(S){
   document.getElementById('baseState').textContent='大本营 蓝'+Math.round(S.base.blue)+'% 红'+Math.round(S.base.red)+'%（'+bs+'）　|　红队动向：'+rs;
   const ub=S.units.filter(u=>u.hp>0&&u.cardId!=='dragon'&&TEAM[u.owner]==='blue').length, ur=S.units.filter(u=>u.hp>0&&u.cardId!=='dragon'&&TEAM[u.owner]==='red').length;
   document.getElementById('uA').textContent=ub; document.getElementById('uB').textContent=ur;
-  document.getElementById('uABar').style.width=Math.min(100,ub/CFG.unitCapPerTeam*100).toFixed(0)+'%';
-  document.getElementById('uBBar').style.width=Math.min(100,ur/CFG.unitCapPerTeam*100).toFixed(0)+'%';
+  const capB=CFG.unitCapPerTeam+((S.capBonus&&S.capBonus.blue)||0), capR=CFG.unitCapPerTeam+((S.capBonus&&S.capBonus.red)||0);
+  document.getElementById('uABar').style.width=Math.min(100,ub/capB*100).toFixed(0)+'%';
+  document.getElementById('uBBar').style.width=Math.min(100,ur/capR*100).toFixed(0)+'%';
   const left=Math.max(0,CFG.durationSec-S.timeMs/1000); document.getElementById('timer').textContent=Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0');
   /* metrics面板已移除(改为历史版本) */
   /* evtCount面板已移除 */
