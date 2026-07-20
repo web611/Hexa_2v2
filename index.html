@@ -72,7 +72,7 @@
     </div>
     <div class="hud-bot">
       <span class="gem" id="verInfo" style="color:#8f8d84;font-size:12px;">v—</span>
-      <div style="display:flex;gap:8px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button></div>
+      <div style="display:flex;gap:8px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button><button class="js-rank">榜单</button></div>
     </div>
     <div id="deckModal" style="display:none;z-index:30;" class="modal-bg">
       <div class="modal"><div style="font-weight:600;margin-bottom:4px;">卡组（固定 8 张）</div>
@@ -87,10 +87,21 @@
     <div id="resultModal" style="display:none;" class="modal-bg">
       <div class="modal">
         <div class="result-title" id="resultText">胜利</div>
-        <div id="resultSub" style="font-size:13px;color:#666;margin-bottom:10px;"></div>
-        <div id="resultStats" style="font-size:12px;color:#555;margin:0 auto 12px;max-height:38vh;overflow:auto;"></div>
+        <div id="resultSub" style="font-size:13px;color:#555;margin-bottom:8px;line-height:1.6;"></div>
+        <div id="resultMvp" style="margin:0 auto 10px;padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,#fdf6e3,#faefd2);border:1px solid #e8d9a8;font-size:13px;color:#6b5b1e;max-width:330px;"></div>
+        <div id="resultStats" style="font-size:12px;color:#555;margin:0 auto 12px;max-height:34vh;overflow:auto;"></div>
         <button id="replayBtn">再来一把</button>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-rules">玩法</button><button class="js-prob">概率</button><button class="js-deck">卡组</button></div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-rules">玩法</button><button class="js-prob">概率</button><button class="js-deck">卡组</button><button class="js-rank">榜单</button></div>
+      </div>
+    </div>
+    <div id="rankModal" style="display:none;" class="modal-bg">
+      <div class="modal">
+        <div class="result-title" style="color:#26261f;">排行榜</div>
+        <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px;">
+          <button class="rk-sort on" data-k="mvp">按MVP</button><button class="rk-sort" data-k="wins">按胜场</button><button class="rk-sort" data-k="avg">按平均取胜分</button>
+        </div>
+        <div id="rankBody" style="font-size:12.5px;color:#555;max-height:48vh;overflow:auto;"></div>
+        <button id="rankClose" style="margin-top:12px;">关闭</button>
       </div>
     </div>
     <div id="rulesModal" style="display:none;" class="modal-bg">
@@ -117,8 +128,8 @@
             <b style="color:#26261f;">注意要点</b><br>
             · 开局 <b>60 秒</b>中央大本营有<b style="color:#2c5fb0">护罩</b>：整个圈子不可穿越，兵会绕道走，先发育。<br>
             · 主城每次产出 <b>8 宝石</b>；<b>敌方建筑不可穿越</b>——挡路必须先拆掉。<br>
-            · 每队兵上限 <b>50</b>（巨龙不占额）；接近上限时出兵额度自动向<b>兵少的队友</b>倾斜，尽量均分。<br>
-            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +30%</b>、<b>防御塔射速 +30%</b>直到追回差距；<b>队友主城被摧毁</b>的一方最高优先开启；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
+            · 每队兵上限 <b>50</b>（巨龙不占额）；接近上限时出兵额度自动向<b>兵少的队友</b>倾斜，尽量均分；满编后兵营照常生产、新兵进入<b>屯兵队列</b>，一有兵阵亡立刻按先进先出补上（原兵营被拆则该批屯兵作废）。<br>
+            · <b>奋进模式</b>：一方被压制时自动开启（如建筑数差距过大、兵力被碾压、或对方占营大幅领先），开启后<b>产宝石速度翻倍</b>、<b>兵(巨龙除外)移速与攻速 +20%</b>、<b>兵营出兵速度 +50%</b>、<b>防御塔射速 +30%</b>直到追回差距（人口/领地/占营时间<b>任一项追平即刻暂停</b>）；<b>队友主城被摧毁</b>的一方最高优先开启；同一时间<b>只有一方</b>能开启（双方都达标时，兵力更弱的一方开启）；开启方的兵与领地会有橙色闪烁特效，宝石数旁带 🔥。<br>
             · 敌方占领<b>倒计时低于 20 秒</b>时，全队自动进入<b>紧急抢营</b>：全军压向中路、只清剿挡路敌兵不追远敌（射程内照常还手）、拆除中路敌方建筑、集中火力打大本营驻军（敌我同规则）。<br>
             · 大本营<b>只能进 1 个兵</b>驻守：切「抢营」后会自动派 1 个兵进驻（优先法师），其余部队在外圈护卫；驻军<b>受伤减半、远程射程+1</b>；<b>巨龙不能进</b>大本营。<br>
             · 外部攻打大本营的兵只能<b>贴着六角形边缘</b>打，打死驻军后己方才能进驻。<br>
@@ -128,8 +139,9 @@
             · 顶部进度条＝三方占地占比（蓝/灰/红）；大本营占领百分比看中央的分半圆环与倒计时。
           </div>
         </div>
+        <div style="margin-top:10px;"><input id="loginName" maxlength="12" placeholder="输入用户名（记录战绩/榜单）" style="padding:8px 10px;border:1px solid #cdcbc2;border-radius:8px;font-size:14px;width:210px;text-align:center;"/></div>
         <button id="startBtn" style="font-size:16px;padding:8px 22px;margin-top:12px;">开始</button>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button></div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;"><button class="js-prob">概率</button><button class="js-deck">卡组</button><button class="js-rank">榜单</button></div>
       </div>
     </div>
   </div>
@@ -150,12 +162,12 @@
    ========================================================================= */
 
 /* ---------------- CONFIG（troops/towers/economy 全部沿用 1v1_v1） -------------- */
-const APP_VERSION='v0.4.13 · 更新 2026-07-17 23:23';   // 版本规则：0.重大.小更新（原型期首位恒为0）
+const APP_VERSION='v0.4.15 · 更新 2026-07-20 09:21';   // 版本规则：0.重大.小更新（原型期首位恒为0）
 const CFG = {
   grid:27, block:9,                 // 27×27 切 3×3 个 9×9 区块，取十字五区为可玩区（每家 9×9）
   cols:27, rows:27,
   durationSec:300, startGems:15, spawnIntervalMult:2.857, unitCapPerTeam:50,
-  cityGemPerSec:1.6, cityGemLump:8, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7, minGap:3}, fog:true, fogRevealMs:3000,
+  cityGemPerSec:1.6, cityGemLump:8, mvpWeights:{kill:2,bDestroy:3,prodU:0.5,built:1,earn:0.03,garrisonSec:1,dragon:5,winBonus:15,lossPen:0.3}, mineGemPerSec:0.525, gemLump:5, comeback:{perBuilding:0.14, cap:0.7, minGap:3}, fog:true, fogRevealMs:3000,
   baseFillSec:60, baseDrainPerSec:1.2, baseShieldSec:60,   // 占领：独占中心 60s 拉满才算赢；前 60s 大本营有护罩
   tileTypeRatio:{barracks:.50, question:.30, tower:.15, mine:.05},
   barracksPriceDist:{15:.60,25:.30,50:.10},
@@ -250,9 +262,10 @@ function neighbors(c,r){ return ODDR[r&1].map(([dc,dr])=>({c:c+dc,r:r+dr})).filt
 function pixelToHex(px,py){ let best=null,bd=1e9; const rr=Math.round((py-OY)/DY); for(let r=rr-1;r<=rr+1;r++){ if(r<0||r>=CFG.rows) continue; const cc=Math.round((px-OX-(r&1)*(DX/2))/DX); for(let c=cc-1;c<=cc+1;c++){ if(c<0||c>=CFG.cols) continue; const ct=center(c,r), d=(ct.x-px)**2+(ct.y-py)**2; if(d<bd){bd=d;best={c,r};} } } if(!best||bd>(SIZE*SIZE)||!playable(best.c,best.r)) return null; return best; }
 
 /* ---------------- SIM 核心（结构完全沿用；owner→team、+中立/大本营） ---------------- */
+function mkPStat(){ return {kills:0,loss:0,bDestroy:0,bLoss:0,built:0,prodU:0,prodB:{mine:0,barracks:0,tower:0},earn:0,spent:0,garrisonMs:0,dragons:0}; }
 const SIM = {
   init(seed, ab){
-    const rng=makeRNG(seed);
+    const rng=makeRNG(seed); this._seed=seed;
     AXIS = rng.next()<0.5 ? 'V' : 'H'; applyAxis();   // 抽图定边：50/50
     const tiles=[];
     for(let r=0;r<CFG.rows;r++){ tiles[r]=[]; for(let c=0;c<CFG.cols;c++){
@@ -267,8 +280,9 @@ const SIM = {
     const S={ tiles, units:[], projs:[], gems:per(CFG.startGems), timeMs:0, over:false,
       winner:null, winCond:null, nextId:1, seed, ab, rng, mines:per(0), twoMineSide:null,
       flipsSinceLegend:per(0), flipsSinceMine:per(0), events:[], leader:null, builtCount:per(0),
-      axis:AXIS, base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base',
-      stats:{ blue:{loss:0,bLoss:0,built:0,earn:0,spent:0,striveMs:0,striveN:0,dragons:0,capMax:0}, red:{loss:0,bLoss:0,built:0,earn:0,spent:0,striveMs:0,striveN:0,dragons:0,capMax:0} } };
+      axis:AXIS, seed:this._seed, base:{blue:0, red:0, hold:null, garrison:null}, cmd:'defend', aiCmd:'base',
+      stats:{ A:mkPStat(), B:mkPStat(), C:mkPStat(), D:mkPStat() },
+      capMax:{blue:0,red:0}, striveStat:{blue:{n:0,ms:0},red:{n:0,ms:0}}, spawnQ:{blue:[],red:[]} };
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; place(S, r, c, {kind:'city',owner:p,hp:CFG.city.hp,maxHp:CFG.city.hp}); }
     for(const p of PLAYERS){ const [c,r]=CITY_AT[p]; guaranteeBase(S, c, r); }
     S.events.push({event:'match_start', mapSeed:seed, ab, mode:'2v2_fourcorner'});
@@ -291,8 +305,8 @@ const SIM = {
     if(!this.canFlip(S,player,c,r)) return;
     const t=S.tiles[r][c]; const {base,distance,final}=this.cost(S,player,c,r);
     t.owner=player;   // 在中立地建造即收归己方
-    S.gems[player]-=final; S.stats[TEAM[player]].spent+=final; S.stats[TEAM[player]].built++;
-    let b=null, rarity=null, resType='outpost'; S.flipsSinceLegend[player]++; S.flipsSinceMine[player]++;
+    S.gems[player]-=final; S.stats[player].spent+=final; S.stats[player].built++;
+    let b=null, rarity=null, resType='outpost'; S.flipsSinceLegend[player]++; S.flipsSinceMine[player]++; const _ps=S.stats[player];
     if(t.type==='mine'){ b=mkMine(player); resType='mine'; }
     else if(t.type==='tower'){ const id=S.rng.weighted(CFG.towerDist); b=mkTower(player,id); resType='tower'; rarity='common'; }
     else if(t.type==='barracks'){ let id=S.rng.weighted(CFG.barracksByPrice[t.price]); id=gateDragon(S,player,id,CFG.barracksByPrice[t.price]); b=mkBarracks(player,id); resType='barracks'; rarity=CFG.troops[id].rarity; }
@@ -302,6 +316,7 @@ const SIM = {
       else if(out==='tower'){ const id=S.rng.weighted(CFG.towerDist); b=mkTower(player,id); resType='tower'; }
       else { b=mkBarracks(player,out); resType='barracks'; rarity=CFG.troops[out].rarity; }
     }
+    if(_ps && _ps.prodB[resType]!==undefined) _ps.prodB[resType]++;   // 生产建筑按矿/兵营/塔分类(问号按实际开出计)
     place(S,r,c,b); S.builtCount[player]=(S.builtCount[player]||0)+1;
     S.events.push({event:'tile_flip', side:player, basePrice:base, distance, finalCost:final, resultType:resType, resultRarity:rarity, gameTimeMs:S.timeMs});
     if(b.kind==='mine'){ S.flipsSinceMine[player]=0; S.mines[player]++; S.events.push({event:'gem_mine_acquired', side:player, mineIndex:S.mines[player], gameTimeMs:S.timeMs}); if(S.mines[player]===2 && !S.twoMineSide){ S.twoMineSide=player; } }
@@ -338,23 +353,30 @@ const SIM = {
     const weaker = (elim.blue!==elim.red) ? (elim.blue?'blue':'red')
                  : (teamU.blue<teamU.red?'blue' : teamU.red<teamU.blue?'red' : (S._striveSt.blue.on?'blue' : S._striveSt.red.on?'red' : 'blue'));
     if(meets.blue && meets.red){ if(weaker==='blue') meets.red=false; else meets.blue=false; }
+    const tc0=S._tileCnt||{blue:0,red:0};
     for(const team of ['blue','red']){
-      const st=S._striveSt[team];
-      if(!st.on){ if(meets[team]){ st.meet+=dt; if(st.meet>=2000){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.stats[team].striveN++; } } else st.meet=0; }
-      else { if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=5000){ st.on=false; st.meet=0; } } }
+      const st=S._striveSt[team]; const opp=team==='blue'?'red':'blue';
+      if(!st.on){ if(meets[team]){ st.meet+=dt; if(st.meet>=2000){ st.on=true; st.miss=0; S.striveFx={until:S.timeMs+2600, side:team}; S.striveStat[team].n++;
+        st.watch={ units:teamU[team]<teamU[opp], tiles:tc0[team]<tc0[opp], cap:capSec[team]<capSec[opp] };   // 记录开启时的落后项
+      } } else st.meet=0; }
+      else {
+        const rev = st.watch && ((st.watch.units&&teamU[team]>=teamU[opp]) || (st.watch.tiles&&tc0[team]>=tc0[opp]) || (st.watch.cap&&capSec[team]>=capSec[opp]));
+        if(rev){ st.on=false; st.meet=0; st.miss=0; }                          // 明显逆转(任一落后项追平)→立即暂停奋进
+        else if(meets[team]) st.miss=0; else { st.miss+=dt; if(st.miss>=5000){ st.on=false; st.meet=0; } }
+      }
     }
     if(S._striveSt.blue.on && S._striveSt.red.on){                             // 硬互斥兜底：绝不允许双方同时奋进,关掉兵力强的一方
       const shut = weaker==='blue' ? 'red' : 'blue';
       S._striveSt[shut].on=false; S._striveSt[shut].meet=0; S._striveSt[shut].miss=0;
     }
-    for(const team of ['blue','red']) if(S._striveSt[team].on){ mul[team]=2; S.stats[team].striveMs+=dt; }   // 奋进：产宝石速度提高一倍
+    for(const team of ['blue','red']) if(S._striveSt[team].on){ mul[team]=2; S.striveStat[team].ms+=dt; }   // 奋进：产宝石速度提高一倍
     S._strive={blue:S._striveSt.blue.on, red:S._striveSt.red.on};
-    S.stats.blue.capMax=Math.max(S.stats.blue.capMax,S.base.blue); S.stats.red.capMax=Math.max(S.stats.red.capMax,S.base.red);
-    const cityLive={};
-    for(const row of S.tiles) for(const t of row){ if(!t) continue; const b=t.building; if(!b) continue; if(b.kind==='city') cityLive[b.owner]=true;
+    S.capMax.blue=Math.max(S.capMax.blue,S.base.blue); S.capMax.red=Math.max(S.capMax.red,S.base.red);
+    const cityLive={}; const tcnt={blue:0,red:0};
+    for(const row of S.tiles) for(const t of row){ if(!t) continue; if(t.owner!=='N') tcnt[TEAM[t.owner]]++; const b=t.building; if(!b) continue; if(b.kind==='city') cityLive[b.owner]=true;
       const m=mul[TEAM[b.owner]]; let rate=0, lump=CFG.gemLump; if(b.kind==='city'){ rate=CFG.cityGemPerSec; lump=CFG.cityGemLump; } else if(b.kind==='mine') rate=CFG.mineGemPerSec;
-      if(rate){ b.gemAcc=(b.gemAcc||0)+rate*m*dt/1000; while(b.gemAcc>=lump){ S.gems[b.owner]+=lump; S.stats[TEAM[b.owner]].earn+=lump; b.gemAcc-=lump; } } }
-    S._cityAlive=cityLive;
+      if(rate){ b.gemAcc=(b.gemAcc||0)+rate*m*dt/1000; while(b.gemAcc>=lump){ S.gems[b.owner]+=lump; S.stats[b.owner].earn+=lump; b.gemAcc-=lump; } } }
+    S._cityAlive=cityLive; S._tileCnt=tcnt;
     // 出兵（人口上限按「队伍合计」；巨龙场上限1、不占人口）
     const uc={A:0,B:0,C:0,D:0}; for(const u of S.units) if(u.hp>0 && u.cardId!=='dragon') uc[u.owner]++;
     const teamCount=(o)=> TEAM[o]==='blue' ? uc.A+uc.C : uc.B+uc.D;
@@ -362,15 +384,26 @@ const SIM = {
     const barCnt={A:0,B:0,C:0,D:0}; const barTiles=[];
     for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.kind==='barracks'){ barTiles.push(t); barCnt[t.building.owner]++; } }
     for(const t of barTiles){ const b=t.building; const iv0=CFG.troops[b.cardId].spawn*CFG.spawnIntervalMult;
-      const iv=(S._strive&&S._strive[TEAM[b.owner]])?iv0/1.3:iv0;                                     // 奋进：建筑出兵速度+30%
+      const iv=(S._strive&&S._strive[TEAM[b.owner]])?iv0/1.5:iv0;                                     // 奋进：建筑出兵速度+50%
       if(b.cardId==='dragon'){ const alive=S.units.some(u=>u.owner===b.owner&&u.cardId==='dragon'&&u.hp>0);
         if(alive){ b.spawnCd=iv; b.spawnTotal=iv; continue; }
-        b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,'dragon',t.c,t.r); S.stats[TEAM[b.owner]].dragons++; }
-      } else { b.spawnCd-=dt; if(b.spawnCd<=0){ if(teamCount(b.owner)>=CFG.unitCapPerTeam) continue;
-        const mate=MATE[b.owner];
-        if(uc[b.owner]>=CFG.unitCapPerTeam/2 && barCnt[mate]>0 && uc[mate]<CFG.unitCapPerTeam/2) continue;   // 接近上限时额度让给兵少的队友(尽量均分)
-        b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,b.cardId,t.c,t.r); uc[b.owner]++; } }
+        b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv; spawnUnit(S,b.owner,'dragon',t.c,t.r); S.stats[b.owner].dragons++; }
+      } else { b.spawnCd-=dt; if(b.spawnCd<=0){ b.spawnCd=iv; b.spawnTotal=iv;
+        const team=TEAM[b.owner], mate=MATE[b.owner];
+        const capped = teamCount(b.owner)>=CFG.unitCapPerTeam;
+        const yield_ = uc[b.owner]>=CFG.unitCapPerTeam/2 && barCnt[mate]>0 && uc[mate]<CFG.unitCapPerTeam/2;   // 均分让位
+        if(capped || yield_){ if(S.spawnQ[team].length<CFG.unitCapPerTeam) S.spawnQ[team].push({o:b.owner,card:b.cardId,c:t.c,r:t.r}); }   // 屯兵：满编/让位时产出进队列
+        else { spawnUnit(S,b.owner,b.cardId,t.c,t.r); uc[b.owner]++; } } }
     }
+    // 屯兵队列出兵：有空位→先进先出(尽量均分;原兵营被拆的条目作废)
+    for(const team of ['blue','red']){ const q=S.spawnQ[team]; if(!q.length) continue; const rep=team==='blue'?'A':'B'; let guard=0;
+      while(q.length && teamCount(rep)<CFG.unitCapPerTeam && guard++<10){
+        let idx=0; const head=q[0]; const mo=MATE[head.o];
+        if(uc[head.o]>=CFG.unitCapPerTeam/2 && uc[mo]<CFG.unitCapPerTeam/2){ const j=q.findIndex(e=>e.o===mo); if(j>=0) idx=j; }
+        const e=q.splice(idx,1)[0];
+        const bt=S.tiles[e.r][e.c]; if(!(bt&&bt.building&&bt.building.kind==='barracks'&&bt.building.owner===e.o)) continue;
+        spawnUnit(S,e.o,e.card,e.c,e.r); uc[e.o]++;
+      } }
     // 子弹
     for(const p of S.projs){ p.t+=dt; if(p.tU && p.tU.hp>0){ p.bx=p.tU.px; p.by=p.tU.py; } if(p.t>=p.dur && !p.done){ p.done=true; projHit(S,p); } }
     S.projs=S.projs.filter(p=>!p.done);
@@ -452,7 +485,7 @@ const SIM = {
       let tgt=null,td=1e9; for(const u of S.units){ if(!isEnemy(u.owner,b.owner)||u.hp<=0) continue; if(isBaseCell(u.c,u.r)) continue; const d=hexDist(t.c,t.r,u.c,u.r); if(d<=spec.range&&d<td){td=d;tgt=u;} }
       if(tgt&&b.atkCd<=0){ b.atkCd=spec.ai; const ct=center(t.c,t.r); const pk=(b.cardId==='tower_arrow')?'arrow':'bolt'; fireProjectile(S,b.owner,ct.x,ct.y,tgt,null,spec.atk,spec.aoe,spec.splash||1,pk,true); }
     }
-    for(const u of S.units) if(u.hp<=0) S.stats[TEAM[u.owner]].loss++;
+    for(const u of S.units) if(u.hp<=0) S.stats[u.owner].loss++;
     S.units=S.units.filter(u=>u.hp>0);
     for(const u of S.units){ if(TEAM[u.owner]==='blue'){ const tt=S.tiles[u.r] && S.tiles[u.r][u.c]; if(tt) tt.seen=S.timeMs; } }
     // 中央大本营占领
@@ -492,25 +525,26 @@ function mkMine(o){ return {kind:'mine',owner:o,hp:CFG.mine.hp,maxHp:CFG.mine.hp
 function mkOutpost(o){ return {kind:'outpost',owner:o,hp:CFG.outpost.hp,maxHp:CFG.outpost.hp}; }
 function mkTower(o,id){ const s=CFG.towers[id]; return {kind:'tower',cardId:id,owner:o,hp:s.hp,maxHp:s.hp,atkCd:0}; }
 function mkBarracks(o,id){ const s=CFG.troops[id]; const iv=s.spawn*CFG.spawnIntervalMult; return {kind:'barracks',cardId:id,owner:o,hp:s.bhp,maxHp:s.bhp,spawnCd:iv/3,spawnTotal:iv/3}; }
-function spawnUnit(S,o,card,c,r){ const s=CFG.troops[card]; const tgt=CENTER_CR; const ns=neighbors(c,r).filter(n=>!(S.tiles[n.r][n.c].building) && !isBaseCell(n.c,n.r)).sort((a,b)=>hexDist(a.c,a.r,tgt.c,tgt.r)-hexDist(b.c,b.r,tgt.c,tgt.r)); const sp=ns[0]||{c,r}; const ct=center(sp.c,sp.r);
+function spawnUnit(S,o,card,c,r){ if(S.stats&&S.stats[o]) S.stats[o].prodU++; const s=CFG.troops[card]; const tgt=CENTER_CR; const ns=neighbors(c,r).filter(n=>!(S.tiles[n.r][n.c].building) && !isBaseCell(n.c,n.r)).sort((a,b)=>hexDist(a.c,a.r,tgt.c,tgt.r)-hexDist(b.c,b.r,tgt.c,tgt.r)); const sp=ns[0]||{c,r}; const ct=center(sp.c,sp.r);
   const st=S.tiles[sp.r] && S.tiles[sp.r][sp.c]; if(st && !st.building && !isAlly(st.owner,o)) st.owner=o;   // 出生格立即归己方（修复：出生不夺格）
   S.units.push({id:S.nextId++,owner:o,cardId:card,c:sp.c,r:sp.r,px:ct.x,py:ct.y,hp:s.hp,maxHp:s.hp,atkCd:0,isHero:card==='dragon',heroCd:card==='dragon'?s.hero.skillMs:0}); if(card==='dragon') S.heroFx={side:o, until:S.timeMs+2400}; }
-function hitUnit(S,e,dmg){ e.hp -= (e===S.base.garrison ? dmg*0.5 : dmg); }   // 大本营驻军受伤减半
+function hitUnit(S,e,dmg,by){ const was=e.hp>0; e.hp -= (e===S.base.garrison ? dmg*0.5 : dmg);   // 大本营驻军受伤减半
+  if(was && e.hp<=0 && by && S.stats[by]) S.stats[by].kills++; }
 function dealDamage(S,u,tgt,kind,spec,tile){ let dmg=spec.atk; if(kind==='building'&&u.isHero) dmg*=(1+spec.hero.buildingBonus);
-  if(kind==='unit') hitUnit(S,tgt,dmg); else tgt.hp-=dmg;
-  if(spec.aoe){ const cc=kind==='unit'?tgt:{c:tile.c,r:tile.r}; for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&e!==tgt&&hexDist(cc.c,cc.r,e.c,e.r)<=(spec.splash||1)) hitUnit(S,e,spec.atk); } }
-  if(kind==='building'&&tgt.hp<=0){ S.stats[TEAM[tgt.owner]].bLoss++; const tl=S.tiles[tile.r][tile.c]; tl.building=null; S._bRev=(S._bRev||0)+1; tl.owner=u.owner; tl.lockUntil=S.timeMs+CFG.rebuildCooldownMs; tl.lockOwner=tgt.owner; }
+  if(kind==='unit') hitUnit(S,tgt,dmg,u.owner); else tgt.hp-=dmg;
+  if(spec.aoe){ const cc=kind==='unit'?tgt:{c:tile.c,r:tile.r}; for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&e!==tgt&&hexDist(cc.c,cc.r,e.c,e.r)<=(spec.splash||1)) hitUnit(S,e,spec.atk,u.owner); } }
+  if(kind==='building'&&tgt.hp<=0){ S.stats[tgt.owner].bLoss++; S.stats[u.owner].bDestroy++; const tl=S.tiles[tile.r][tile.c]; tl.building=null; S._bRev=(S._bRev||0)+1; tl.owner=u.owner; tl.lockUntil=S.timeMs+CFG.rebuildCooldownMs; tl.lockOwner=tgt.owner; }
 }
-function heroSkill(S,u,spec){ for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&hexDist(u.c,u.r,e.c,e.r)<=spec.hero.skillRange) hitUnit(S,e,spec.hero.skillDmg); }
-  for(const row of S.tiles) for(const t of row){ if(t&&t.building&&isEnemy(t.building.owner,u.owner)&&hexDist(u.c,u.r,t.c,t.r)<=spec.hero.skillRange){ t.building.hp-=spec.hero.skillDmg*(1+spec.hero.buildingBonus); if(t.building.hp<=0){ const b=t.building; S.stats[TEAM[b.owner]].bLoss++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=u.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } } }
+function heroSkill(S,u,spec){ for(const e of S.units){ if(isEnemy(e.owner,u.owner)&&hexDist(u.c,u.r,e.c,e.r)<=spec.hero.skillRange) hitUnit(S,e,spec.hero.skillDmg,u.owner); }
+  for(const row of S.tiles) for(const t of row){ if(t&&t.building&&isEnemy(t.building.owner,u.owner)&&hexDist(u.c,u.r,t.c,t.r)<=spec.hero.skillRange){ t.building.hp-=spec.hero.skillDmg*(1+spec.hero.buildingBonus); if(t.building.hp<=0){ const b=t.building; S.stats[b.owner].bLoss++; S.stats[u.owner].bDestroy++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=u.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } } }
 function fireProjectile(S,owner,ax,ay,tU,tTile,dmg,aoe,splash,kind,srcT){
   let bx,by; if(tU){ bx=tU.px; by=tU.py; } else if(tTile){ const c=center(tTile.c,tTile.r); bx=c.x; by=c.y; } else { bx=ax; by=ay; }
   const dist=Math.hypot(bx-ax,by-ay); const sp=(CFG.projSpeed&&CFG.projSpeed[kind])||0.6; const dur=Math.max(90,Math.min(1400,dist/sp));
   S.projs.push({owner,ax,ay,t:0,bx,by,dur,kind,dmg,aoe,splash,srcT:!!srcT,tU:tU||null,tTile:tTile?{c:tTile.c,r:tTile.r}:null,done:false});
 }
 function projHit(S,p){
-  if(p.tU){ if(p.tU.hp>0){ hitUnit(S,p.tU,p.dmg); if(p.aoe){ for(const e of S.units){ if(isEnemy(e.owner,p.owner)&&e!==p.tU&&e.hp>0&&hexDist(p.tU.c,p.tU.r,e.c,e.r)<=(p.splash||1)){ if(p.srcT&&isBaseCell(e.c,e.r)) continue; hitUnit(S,e,p.dmg); } } } } }
-  else if(p.tTile){ const t=S.tiles[p.tTile.r][p.tTile.c]; const b=t&&t.building; if(b && isEnemy(b.owner,p.owner)){ b.hp-=p.dmg; if(b.hp<=0){ S.stats[TEAM[b.owner]].bLoss++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=p.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } }
+  if(p.tU){ if(p.tU.hp>0){ hitUnit(S,p.tU,p.dmg,p.owner); if(p.aoe){ for(const e of S.units){ if(isEnemy(e.owner,p.owner)&&e!==p.tU&&e.hp>0&&hexDist(p.tU.c,p.tU.r,e.c,e.r)<=(p.splash||1)){ if(p.srcT&&isBaseCell(e.c,e.r)) continue; hitUnit(S,e,p.dmg,p.owner); } } } } }
+  else if(p.tTile){ const t=S.tiles[p.tTile.r][p.tTile.c]; const b=t&&t.building; if(b && isEnemy(b.owner,p.owner)){ b.hp-=p.dmg; if(b.hp<=0){ S.stats[b.owner].bLoss++; S.stats[p.owner].bDestroy++; t.building=null; S._bRev=(S._bRev||0)+1; t.owner=p.owner; t.lockUntil=S.timeMs+CFG.rebuildCooldownMs; t.lockOwner=b.owner; } } }
 }
 function teamTiles(S){ let blue=0,red=0; for(const row of S.tiles) for(const t of row){ if(!t) continue; if(TEAM[t.owner]==='blue')blue++; else if(TEAM[t.owner]==='red')red++; } return {blue,red}; }
 function teamHasCity(S,team){ for(const row of S.tiles) for(const t of row){ if(t&&t.building&&t.building.kind==='city'&&TEAM[t.building.owner]===team) return true; } return false; }
@@ -664,6 +698,7 @@ function updateBase(S,dt){
   if(!g && onC.length){ g = onC.find(u=>u.cardId==='mage') || onC[0]; }        // 空位：法师优先进驻
   else if(g && g.cardId!=='mage'){ const m=onC.find(u=>u.cardId==='mage' && isAlly(u.owner,g.owner)); if(m) g=m; }   // 法师到场→顶替(享减伤+射程)
   S.base.garrison=g;
+  if(g && S.stats[g.owner]) S.stats[g.owner].garrisonMs+=dt;   // 驻营时长(MVP权重项)
   if(g){ g.px=BASE_PX.x; g.py=BASE_PX.y; g.c=Cc; g.r=Cr; }                     // 驻军放正：钉在六角形正中心
   const enemyOnC = g && onC.some(u=>isEnemy(u.owner,g.owner));         // 敌兵也踏上中心 → 争夺（先分胜负，不推进）
   if(g && !enemyOnC){ const t=TEAM[g.owner];
@@ -932,6 +967,37 @@ document.querySelectorAll('#cmdBar .cmd[data-cmd]').forEach(b=>b.onclick=()=>{ i
 document.querySelectorAll('.js-deck').forEach(b=>b.onclick=()=>{ paused=true; buildDeck(); document.getElementById('deckModal').style.display='flex'; });
 document.getElementById('deckClose').onclick=()=>{ document.getElementById('deckModal').style.display='none'; paused=false; };
 document.querySelectorAll('.js-prob').forEach(b=>b.onclick=()=>{ paused=true; buildProb(); document.getElementById('probModal').style.display='flex'; });
+/* ── 本地战绩存储 ── */
+const Store={
+  user(){ try{return localStorage.getItem('hexwar_user')||'';}catch(e){return '';} },
+  setUser(n){ try{localStorage.setItem('hexwar_user',n);}catch(e){} },
+  matches(){ try{return JSON.parse(localStorage.getItem('hexwar_matches')||'[]');}catch(e){return [];} },
+  save(m){ try{ const a=this.matches(); a.push(m); while(a.length>500)a.shift(); localStorage.setItem('hexwar_matches',JSON.stringify(a)); }catch(e){} }
+};
+let PLAYER_NAME=Store.user()||'';
+function mvpScore(S,p){ const w=CFG.mvpWeights, st=S.stats[p];
+  return st.kills*w.kill + st.bDestroy*w.bDestroy + st.prodU*w.prodU + st.built*w.built + st.earn*w.earn
+       + st.garrisonMs/1000*w.garrisonSec + st.dragons*w.dragon + (TEAM[p]===S.winner?w.winBonus:0) - st.loss*w.lossPen; }
+function buildRank(sortKey){
+  const agg={};
+  for(const m of Store.matches()){ const me=m.players&&m.players[0]; if(!me||me.id!=='A'||!me.name) continue;
+    const a=agg[me.name]||(agg[me.name]={name:me.name,games:0,wins:0,mvp:0,winScoreSum:0,winN:0});
+    a.games++; if(m.winnerTeam==='blue'){ a.wins++; a.winScoreSum+=me.score; a.winN++; } if(me.mvp) a.mvp++; }
+  const rows=Object.values(agg);
+  for(const r of rows) r.avg = r.winN>=3 ? r.winScoreSum/r.winN : null;
+  const key=sortKey||'mvp';
+  rows.sort((x,y)=> key==='wins' ? (y.wins-x.wins)||(y.mvp-x.mvp)||((y.avg||0)-(x.avg||0))
+                  : key==='avg'  ? ((y.avg||-1)-(x.avg||-1))||(y.mvp-x.mvp)||(y.wins-x.wins)
+                  : (y.mvp-x.mvp)||(y.wins-x.wins)||((y.avg||0)-(x.avg||0)) );
+  let html='<table style="width:100%;border-collapse:collapse;"><tr style="color:#888;"><td style="padding:3px 6px;">#</td><td style="text-align:left;">用户名</td><td>MVP</td><td>胜场</td><td>平均取胜分</td><td>总局数</td></tr>';
+  rows.forEach((r,i)=>{ html+='<tr'+(r.name===PLAYER_NAME?' style="font-weight:700;color:#2f7ed8;"':'')+'><td style="padding:3px 6px;">'+(i+1)+'</td><td style="text-align:left;">'+r.name+'</td><td style="text-align:center;">'+r.mvp+'</td><td style="text-align:center;">'+r.wins+'</td><td style="text-align:center;">'+(r.avg==null?'—':r.avg.toFixed(1))+'</td><td style="text-align:center;">'+r.games+'</td></tr>'; });
+  html+='</table>'; if(!rows.length) html='<div style="color:#999;padding:14px;">暂无战绩——登录用户名并打完一局后上榜</div>';
+  document.getElementById('rankBody').innerHTML=html;
+}
+let RANK_SORT='mvp';
+document.querySelectorAll('.js-rank').forEach(b=>b.onclick=()=>{ paused=true; buildRank(RANK_SORT); document.getElementById('rankModal').style.display='flex'; });
+document.querySelectorAll('.rk-sort').forEach(b=>b.onclick=()=>{ RANK_SORT=b.getAttribute('data-k'); document.querySelectorAll('.rk-sort').forEach(x=>x.classList.toggle('on',x===b)); buildRank(RANK_SORT); });
+document.getElementById('rankClose').onclick=()=>{ document.getElementById('rankModal').style.display='none'; };
 function showRules(){ document.getElementById('rulesBody').innerHTML=document.getElementById('rulesContent').innerHTML; document.getElementById('rulesModal').style.display='flex'; }
 document.getElementById('btnRules').onclick=showRules;
 document.querySelectorAll('.js-rules').forEach(b=>b.onclick=showRules);
@@ -1002,22 +1068,55 @@ function updateHUD(S){
 }
 function showResult(S){ const win=S.winner==='blue'; document.getElementById('resultText').textContent=win?'胜利':'失败'; document.getElementById('resultText').style.color=win?'#1f6fc4':'#c23b3b';
   const mm=Math.floor(S.timeMs/60000), ss=Math.floor(S.timeMs/1000)%60;
-  document.getElementById('resultSub').textContent=(S.winCond==='base'?'占领中央大本营':S.winCond==='city'?'摧毁敌队主城':'计时结束 · 占领条/占格多者胜')+' · 用时 '+mm+':'+String(ss).padStart(2,'0');
-  // 战报
-  let tb=0,tr=0; for(const row of S.tiles) for(const t of row){ if(!t||t.owner==='N') continue; if(TEAM[t.owner]==='blue') tb++; else tr++; }
-  const st=S.stats, B=st.blue, R=st.red;
-  const rows=[ ['击杀兵力', R.loss, B.loss], ['损失兵力', B.loss, R.loss],
-    ['摧毁建筑', R.bLoss, B.bLoss], ['损失建筑', B.bLoss, R.bLoss], ['建造次数', B.built, R.built],
-    ['宝石产出', Math.floor(B.earn), Math.floor(R.earn)], ['宝石消耗', Math.floor(B.spent), Math.floor(R.spent)],
-    ['结束占格', tb, tr], ['大本营占领峰值', Math.floor(B.capMax)+'%', Math.floor(R.capMax)+'%'],
-    ['奋进模式', B.striveN+'次·'+Math.round(B.striveMs/1000)+'s', R.striveN+'次·'+Math.round(R.striveMs/1000)+'s'],
-    ['巨龙召唤', B.dragons, R.dragons] ];
-  let html='<table style="width:100%;border-collapse:collapse;">';
-  html+='<tr style="color:#888;"><td style="text-align:right;padding:2px 8px;color:#2f7ed8;font-weight:600;">我方蓝队</td><td style="text-align:center;padding:2px 4px;"></td><td style="text-align:left;padding:2px 8px;color:#d64545;font-weight:600;">敌方红队</td></tr>';
-  for(const [k,vb,vr] of rows){ const hb=(parseFloat(vb)||0)>=(parseFloat(vr)||0);
-    html+='<tr><td style="text-align:right;padding:2px 8px;'+(hb?'font-weight:700;color:#2f7ed8;':'')+'">'+vb+'</td><td style="text-align:center;padding:2px 4px;color:#999;white-space:nowrap;">'+k+'</td><td style="text-align:left;padding:2px 8px;'+(!hb?'font-weight:700;color:#d64545;':'')+'">'+vr+'</td></tr>'; }
+  const tiles={A:0,B:0,C:0,D:0}; for(const row of S.tiles) for(const t of row){ if(t&&tiles[t.owner]!==undefined) tiles[t.owner]++; }
+  // 顶部摘要：一行胜因(突出决定性指标) + 一行小字(用时/奋进)
+  const tB=tiles.A+tiles.C, tR=tiles.B+tiles.D;
+  let head='';
+  if(S.winCond==='base') head='<b>'+(win?'我方':'敌方')+'占满中央大本营</b>';
+  else if(S.winCond==='city') head='<b>'+(win?'拆光敌队主城':'我队主城被拆光')+'</b>';
+  else head='<b>计时结束</b> · 占格 <b style="color:#2f7ed8">蓝 '+tB+'</b> : <b style="color:#d64545">红 '+tR+'</b> · 占领峰值 蓝'+Math.floor(S.capMax.blue)+'% 红'+Math.floor(S.capMax.red)+'%';
+  const sv=(S.striveStat.blue.n||S.striveStat.red.n)?(' · 奋进 蓝'+S.striveStat.blue.n+'次/'+Math.round(S.striveStat.blue.ms/1000)+'s 红'+S.striveStat.red.n+'次/'+Math.round(S.striveStat.red.ms/1000)+'s'):'';
+  document.getElementById('resultSub').innerHTML=head+'<br><span style="font-size:12px;color:#999;">用时 '+mm+':'+String(ss).padStart(2,'0')+sv+'</span>';
+  // 四方战报 + MVP
+  const leftE=S.axis==='V'?'B':'D', rightE=leftE==='B'?'D':'B';
+  const cols=['A','C',leftE,rightE];
+  const names={A:(PLAYER_NAME||'我'), C:'AI·队友', [leftE]:'AI·左敌', [rightE]:'AI·右敌'};
+  const score={}, sTie={}; for(const p of cols){ score[p]=mvpScore(S,p); sTie[p]=S.stats[p].garrisonMs*1e6+S.stats[p].bDestroy; }
+  let mvp=cols[0]; for(const p of cols) if(score[p]>score[mvp]+1e-9 || (Math.abs(score[p]-score[mvp])<=1e-9 && sTie[p]>sTie[mvp])) mvp=p;
+  const g=(p,k)=>S.stats[p][k];
+  // MVP独立卡片：归属+得分+三项高光
+  const hl=[]; const ms=S.stats[mvp];
+  hl.push('击杀 '+ms.kills); hl.push('摧毁建筑 '+ms.bDestroy);
+  if(Math.round(ms.garrisonMs/1000)>0) hl.push('驻营 '+Math.round(ms.garrisonMs/1000)+'s'); else hl.push('生产兵力 '+ms.prodU);
+  document.getElementById('resultMvp').innerHTML='👑 <b>本局 MVP：<span style="color:'+(TEAM[mvp]==='blue'?'#2f7ed8':'#d64545')+'">'+names[mvp]+'</span></b> · '+score[mvp].toFixed(1)+' 分'
+    +'<br><span style="font-size:12px;color:#8a7a3a;">'+hl.join(' · ')+'</span>';
+  const rows=[
+    ['得分', p=>score[p].toFixed(1)],
+    ['击杀兵力', p=>g(p,'kills')], ['损失兵力', p=>g(p,'loss')],
+    ['摧毁建筑', p=>g(p,'bDestroy')], ['损失建筑', p=>g(p,'bLoss')],
+    ['生产兵力', p=>g(p,'prodU')],
+    ['生产建筑', p=>'矿 '+g(p,'prodB').mine+'<br>营 '+g(p,'prodB').barracks+'<br>塔 '+g(p,'prodB').tower],
+    ['建造次数', p=>g(p,'built')], ['宝石产出', p=>Math.floor(g(p,'earn'))], ['宝石消耗', p=>Math.floor(g(p,'spent'))],
+    ['驻营时长', p=>Math.round(g(p,'garrisonMs')/1000)+'s'], ['巨龙', p=>g(p,'dragons')], ['结束占格', p=>tiles[p]] ];
+  let html='<table style="width:100%;border-collapse:collapse;font-size:11.5px;"><tr style="color:#888;"><td></td>';
+  for(const p of cols) html+='<td style="text-align:center;padding:2px 3px;font-weight:600;color:'+(TEAM[p]==='blue'?'#2f7ed8':'#d64545')+';">'+names[p]+(p===mvp?' 👑':'')+'</td>';
+  html+='</tr>';
+  let ri=0;
+  for(const [k,fn] of rows){ html+='<tr style="background:'+(ri++%2?'#faf9f4':'transparent')+';"><td style="text-align:right;padding:3px 4px;color:#999;white-space:nowrap;">'+k+'</td>';
+    for(const p of cols) html+='<td style="text-align:center;padding:3px 3px;'+(p===mvp?'font-weight:600;':'')+'">'+fn(p)+'</td>'; html+='</tr>'; }
   html+='</table>';
   document.getElementById('resultStats').innerHTML=html;
+  // 保存本局战绩(本地)
+  if(!S._recSaved){ S._recSaved=true;
+    const rec={ id:'m_'+Date.now(), ts:Date.now(), ver:APP_VERSION.split(' ')[0], seed:S.seed, axis:S.axis,
+      durationSec:Math.round(S.timeMs/1000), winCond:S.winCond, winnerTeam:S.winner,
+      players: cols.map(p=>({ id:p, name:names[p], team:TEAM[p], ai:p!=='A', score:+score[p].toFixed(1), mvp:p===mvp,
+        stats:{ kills:g(p,'kills'), loss:g(p,'loss'), bDestroy:g(p,'bDestroy'), bLoss:g(p,'bLoss'),
+                prodUnits:g(p,'prodU'), prodB:g(p,'prodB'), built:g(p,'built'),
+                earn:Math.floor(g(p,'earn')), spent:Math.floor(g(p,'spent')),
+                garrisonSec:Math.round(g(p,'garrisonMs')/1000), dragons:g(p,'dragons'), tilesEnd:tiles[p] } })) };
+    Store.save(rec);
+  }
   document.getElementById('resultModal').style.display='flex'; }
 document.getElementById('replayBtn').onclick=()=>{ TEL.all.push({event:'replay_click', ts:Date.now()}); newMatch(); };
 
@@ -1045,8 +1144,9 @@ function drawPhaseOverlay(){ if(PHASE.mode==='play') return; const cx=RW()/2, cy
 /* 启动 */
 setupCanvas(); buildDeck(); document.getElementById('verInfo').textContent=APP_VERSION;
 let looping=false;
-function beginMatch(){ document.getElementById('startModal').style.display='none'; setupCanvas(); newMatch(); if(!looping){ looping=true; requestAnimationFrame(loop); } }
+function beginMatch(){ const nm=(document.getElementById('loginName').value||'').trim(); if(nm){ PLAYER_NAME=nm; Store.setUser(nm); } document.getElementById('startModal').style.display='none'; setupCanvas(); newMatch(); if(!looping){ looping=true; requestAnimationFrame(loop); } }
 document.getElementById('startBtn').onclick=beginMatch;
+try{ document.getElementById('loginName').value=PLAYER_NAME; }catch(e){}
 </script>
 </body>
 </html>
